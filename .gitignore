@@ -1,0 +1,16 @@
+# Data / secrets
+data/*.db
+*.sqlite
+*.sqlite3
+# NOTE: web/properties.db and web/properties.db.js are intentionally committed —
+# they are the published snapshot the static viewer (web/index.html) reads.
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Playwright
+.playwright/

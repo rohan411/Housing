@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bangalore Premium Property Assistant</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } }
+  };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+<script src="properties.db.js"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script>
+  // Force the classic JSX runtime (React.createElement) so the in-browser
+  // transform emits no ESM `import` statements inside a classic <script>.
+  Babel.registerPreset("react-classic", {
+    presets: [[Babel.availablePresets["react"], { runtime: "classic" }]],
+  });
+</script>
+<style>
+  body { font-family: 'Inter', system-ui, sans-serif; }
+  ::-webkit-scrollbar { height: 10px; width: 10px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react-classic">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+const TARGET = new Set(["whitefield", "marathahalli"]);
+const CRITERIA = { minCr: 3, maxCr: 5, minSqft: 2000, possession: "2028-06-30" };
+const fmtCr = v => (v == null ? "—" : "₹" + Number(v).toFixed(2) + " Cr");
+const cls = (...a) => a.filter(Boolean).join(" ");
+
+/* ---------- small UI atoms ---------- */
+function Stat({ label, value, sub, accent }) {
+  return (
+    <div className="rounded-xl bg-white border border-slate-200 shadow-sm px-4 py-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
+      <div className={cls("text-2xl font-bold mt-0.5", accent || "text-slate-800")}>{value}</div>
+      {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputCls =
+  "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm " +
+  "focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none";
+
+function Badge({ kind }) {
+  const map = {
+    villa: "bg-violet-100 text-violet-700",
+    apartment: "bg-sky-100 text-sky-700",
+    primary: "bg-emerald-100 text-emerald-700",
+    resale: "bg-amber-100 text-amber-700",
+  };
+  return <span className={cls("px-2 py-0.5 rounded-md text-xs font-medium", map[kind] || "bg-slate-100 text-slate-600")}>{kind}</span>;
+}
+
+/* ---------- filter bar ---------- */
+const EMPTY = {
+  q: "", locality: "", type: "", listing: "", builder: "", source: "",
+  minCr: "", maxCr: "", minSize: "", possession: "", onlyPriced: false, onlyTarget: false,
+};
+
+function Filters({ f, set, options, onReset, onCriteria }) {
+  const upd = (k) => (e) => set({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+  const Sel = (k, list, any = "any") => (
+    <select className={inputCls} value={f[k]} onChange={upd(k)}>
+      <option value="">{any}</option>
+      {list.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+  return (
+    <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4">
+      <div className="flex flex-wrap gap-3 items-end">
+        <Field label="Search">
+          <input className={cls(inputCls, "w-56")} placeholder="name, area, description…" value={f.q} onChange={upd("q")} />
+        </Field>
+        <Field label="Locality">{Sel("locality", options.localities)}</Field>
+        <Field label="Type">{Sel("type", options.types)}</Field>
+        <Field label="Listing">{Sel("listing", options.listings)}</Field>
+        <Field label="Builder">{Sel("builder", options.builders)}</Field>
+        <Field label="Source">{Sel("source", options.sources)}</Field>
+        <Field label="Min ₹Cr"><input type="number" step="0.1" className={cls(inputCls, "w-24")} value={f.minCr} onChange={upd("minCr")} placeholder="3" /></Field>
+        <Field label="Max ₹Cr"><input type="number" step="0.1" className={cls(inputCls, "w-24")} value={f.maxCr} onChange={upd("maxCr")} placeholder="5" /></Field>
+        <Field label="Min sqft"><input type="number" step="50" className={cls(inputCls, "w-24")} value={f.minSize} onChange={upd("minSize")} placeholder="2000" /></Field>
+        <Field label="Possession ≤"><input type="date" className={inputCls} value={f.possession} onChange={upd("possession")} /></Field>
+      </div>
+      <div className="flex flex-wrap gap-4 items-center mt-3">
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" className="rounded" checked={f.onlyPriced} onChange={upd("onlyPriced")} /> Only priced
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" className="rounded" checked={f.onlyTarget} onChange={upd("onlyTarget")} /> Only Whitefield / Marathahalli
+        </label>
+        <div className="flex-1" />
+        <button onClick={onCriteria} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-sm">
+          ⭐ My criteria
+        </button>
+        <button onClick={onReset} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm font-semibold hover:bg-slate-200">
+          Reset
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- results table ---------- */
+const COLS = [
+  { k: "source", label: "Source" },
+  { k: "builder", label: "Builder" },
+  { k: "description", label: "Details" },
+  { k: "bhk", label: "BHK" },
+  { k: "type", label: "Type" },
+  { k: "listing", label: "Listing" },
+  { k: "locality", label: "Locality" },
+  { k: "price_cr", label: "Price", num: true },
+  { k: "size_sqft", label: "Sq ft", num: true },
+  { k: "possession", label: "Possession" },
+  { k: "rera_id", label: "RERA" },
+];
+
+function ColMenu({ c, open, setOpen, sel, setSel, values }) {
+  const [search, setSearch] = useState("");
+  const [anchor, setAnchor] = useState(null);
+  const active = c.num ? !!(sel && (sel.min || sel.max)) : !!(sel && sel.length);
+  const funnel = (
+    <button
+      onClick={(e) => { e.stopPropagation(); setAnchor(e.currentTarget.getBoundingClientRect()); setOpen(open ? null : c.k); }}
+      title="Filter column"
+      className={cls("ml-1 inline-flex items-center justify-center w-5 h-5 rounded transition align-middle",
+                     active ? "bg-indigo-600 text-white" : "text-slate-400 hover:bg-slate-200 hover:text-slate-600")}>
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path d="M3 4a1 1 0 011-1h12a1 1 0 01.8 1.6L12 11v4a1 1 0 01-.55.9l-2 1A1 1 0 018 16v-5L3.2 4.6A1 1 0 013 4z"/></svg>
+    </button>
+  );
+  if (!open || !anchor) return funnel;
+
+  let body;
+  if (c.num) {
+    const cur = sel || { min: "", max: "" };
+    const upd = (k) => (e) => setSel(c.k, { ...cur, [k]: e.target.value });
+    body = (
+      <div className="space-y-2">
+        <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Range</div>
+        <div className="flex items-center gap-1">
+          <input type="number" placeholder="min" value={cur.min} onChange={upd("min")}
+                 className="w-20 text-xs border border-slate-200 rounded px-1.5 py-1" />
+          <span className="text-slate-400 text-xs">–</span>
+          <input type="number" placeholder="max" value={cur.max} onChange={upd("max")}
+                 className="w-20 text-xs border border-slate-200 rounded px-1.5 py-1" />
+        </div>
+      </div>
+    );
+  } else {
+    const cur = sel || [];
+    const shown = values.filter(v => v.toLowerCase().includes(search.toLowerCase()));
+    const allOn = shown.length > 0 && shown.every(v => cur.includes(v));
+    const toggle = (v) => setSel(c.k, cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v]);
+    const toggleAll = () => setSel(c.k, allOn ? cur.filter(v => !shown.includes(v)) : [...new Set([...cur, ...shown])]);
+    body = (
+      <div className="space-y-1.5">
+        <input autoFocus placeholder="search values…" value={search} onChange={e => setSearch(e.target.value)}
+               className="w-full text-xs border border-slate-200 rounded px-1.5 py-1" />
+        <label className="flex items-center gap-2 text-xs font-medium text-slate-600 border-b border-slate-100 pb-1">
+          <input type="checkbox" checked={allOn} onChange={toggleAll} /> (Select all)
+        </label>
+        <div className="max-h-48 overflow-auto pr-1 space-y-0.5">
+          {shown.map(v => (
+            <label key={v} className="flex items-center gap-2 text-xs text-slate-600 hover:bg-slate-50 rounded px-1 py-0.5">
+              <input type="checkbox" checked={cur.includes(v)} onChange={() => toggle(v)} />
+              <span className="truncate" title={v}>{v}</span>
+            </label>
+          ))}
+          {shown.length === 0 && <div className="text-xs text-slate-400 px-1 py-2">No values</div>}
+        </div>
+      </div>
+    );
+  }
+
+  const W = 240;
+  const left = Math.max(8, Math.min(anchor.right - W, window.innerWidth - W - 8));
+  const top = anchor.bottom + 4;
+  return (
+    <>
+      {funnel}
+      {ReactDOM.createPortal(
+        <>
+          <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(null); }} />
+          <div onClick={(e) => e.stopPropagation()}
+               style={{ position: "fixed", top, left, width: W }}
+               className="z-50 rounded-xl border border-slate-200 bg-white shadow-xl p-2.5 font-normal normal-case text-left text-slate-700">
+            {body}
+            <div className="flex justify-between items-center pt-2 mt-1 border-t border-slate-100">
+              <button onClick={() => setSel(c.k, null)} className="text-xs text-slate-500 hover:text-rose-600">Clear</button>
+              <button onClick={() => setOpen(null)} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">Done</button>
+            </div>
+          </div>
+        </>,
+        document.body)}
+    </>
+  );
+}
+
+function Table({ rows, sort, setSort, colSel, setColSel, colValues }) {
+  const [openCol, setOpenCol] = useState(null);
+  // Close the (fixed-positioned) filter popover on scroll/resize so it never
+  // floats away from its funnel button. Capture phase catches the inner scroll.
+  useEffect(() => {
+    if (!openCol) return;
+    const close = () => setOpenCol(null);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [openCol]);
+  const arrow = (k) => (sort.k === k ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
+  const click = (k) => setSort(s => ({ k, dir: s.k === k && s.dir === "asc" ? "desc" : "asc" }));
+  const setSel = (k, val) => setColSel(prev => {
+    const next = { ...prev };
+    if (val == null || (Array.isArray(val) && !val.length) ||
+        (val && !Array.isArray(val) && !val.min && !val.max)) delete next[k];
+    else next[k] = val;
+    return next;
+  });
+  return (
+    <div className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden bg-white">
+      <div className="overflow-auto max-h-[65vh]">
+        <table className="min-w-full text-sm">
+          <thead className="sticky top-0 bg-slate-100/95 backdrop-blur z-10">
+            <tr>
+              {COLS.map(c => (
+                <th key={c.k}
+                    className={cls("px-3 py-2.5 font-semibold text-slate-600 select-none whitespace-nowrap relative",
+                                   c.num ? "text-right" : "text-left")}>
+                  <span className="inline-flex items-center">
+                    <span onClick={() => click(c.k)} className="cursor-pointer hover:text-slate-900">{c.label}{arrow(c.k)}</span>
+                    <ColMenu c={c} open={openCol === c.k} setOpen={setOpenCol}
+                             sel={colSel[c.k]} setSel={setSel} values={colValues[c.k] || []} />
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const tgt = TARGET.has((r.locality || "").toLowerCase());
+              return (
+                <tr key={r.id} className={cls("border-t border-slate-100 hover:bg-indigo-50/40", tgt && "bg-amber-50/40")}>
+                  <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.source}</td>
+                  <td className="px-3 py-2 whitespace-nowrap font-medium">{r.builder}</td>
+                  <td className="px-3 py-2 max-w-sm truncate" title={r.description || ""}>
+                    {r.url ? <a href={r.url} target="_blank" rel="noopener" className="text-indigo-600 hover:underline">{r.description || "link"}</a> : (r.description || "—")}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {r.bhk
+                      ? <span className="inline-block rounded-md bg-fuchsia-100 text-fuchsia-700 font-bold px-2 py-0.5 text-xs ring-1 ring-fuchsia-300">{r.bhk}</span>
+                      : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2"><Badge kind={r.type} /></td>
+                  <td className="px-3 py-2">{r.listing && <Badge kind={r.listing} />}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {tgt ? <span className="text-amber-600 font-semibold">★ {r.locality}</span> : (r.locality || "?")}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmtCr(r.price_cr)}</td>
+                  <td className={cls("px-3 py-2 text-right tabular-nums", r.size_sqft >= 2000 ? "text-emerald-700 font-semibold" : "text-slate-500")}>
+                    {r.size_sqft ? (r.size_sqft >= 2000 ? "✓ " + r.size_sqft : r.size_sqft) : "—"}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.possession || "—"}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-[11px] text-slate-400">{r.rera_id || "—"}</td>
+                </tr>
+              );
+            })}
+            {rows.length === 0 && (
+              <tr><td colSpan={COLS.length} className="px-3 py-10 text-center text-slate-400">No listings match these filters.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- advanced raw SQL ---------- */
+function SqlPanel({ db }) {
+  const [open, setOpen] = useState(false);
+  const [sql, setSql] = useState("SELECT source, builder, type, locality, price_cr, possession\nFROM v_listings\nWHERE locality IN ('whitefield','marathahalli')\nORDER BY price_cr;");
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState("");
+  const run = () => {
+    setErr(""); setRes(null);
+    try { const r = db.exec(sql); setRes(r.length ? r[0] : { columns: [], values: [] }); }
+    catch (e) { setErr(e.message); }
+  };
+  return (
+    <div className="rounded-2xl bg-white border border-slate-200 shadow-sm">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-600">
+        <span>🛠️ Advanced — raw read-only SQL (<code className="bg-slate-100 px-1 rounded">v_listings</code>)</span>
+        <span>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4">
+          <textarea value={sql} onChange={e => setSql(e.target.value)}
+            className="w-full h-28 rounded-lg border border-slate-300 bg-slate-900 text-emerald-300 font-mono text-xs p-3 outline-none" />
+          <div className="mt-2"><button onClick={run} className="px-3 py-2 rounded-lg bg-slate-800 text-white text-sm font-semibold hover:bg-slate-700">Run SQL ▶</button></div>
+          {err && <div className="mt-2 text-sm text-rose-600">{err}</div>}
+          {res && (
+            <div className="mt-3 overflow-auto max-h-72 rounded-lg border border-slate-200">
+              <table className="min-w-full text-xs">
+                <thead className="bg-slate-100"><tr>{res.columns.map(c => <th key={c} className="px-2 py-1.5 text-left font-semibold text-slate-600">{c}</th>)}</tr></thead>
+                <tbody>{res.values.map((row, i) => <tr key={i} className="border-t border-slate-100">{row.map((v, j) => <td key={j} className="px-2 py-1 whitespace-nowrap">{v == null ? "" : String(v)}</td>)}</tr>)}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- app ---------- */
+function App() {
+  const [db, setDb] = useState(null);
+  const [all, setAll] = useState([]);
+  const [meta, setMeta] = useState({ n: 0, updated: "" });
+  const [status, setStatus] = useState("loading");
+  const [f, setF] = useState(EMPTY);
+  const [colSel, setColSel] = useState({});
+  const [sort, setSort] = useState({ k: "price_cr", dir: "asc" });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const SQL = await initSqlJs({ locateFile: fn => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${fn}` });
+        let bytes;
+        if (window.__PROPERTIES_DB_B64__) {
+          // Embedded snapshot — works from file:// and over HTTP alike.
+          const bin = atob(window.__PROPERTIES_DB_B64__);
+          bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        } else {
+          const buf = await (await fetch("properties.db", { cache: "no-store" })).arrayBuffer();
+          bytes = new Uint8Array(buf);
+        }
+        const database = new SQL.Database(bytes);
+        const q = database.exec("SELECT * FROM v_listings");
+        const cols = q[0].columns, rows = q[0].values.map(v => Object.fromEntries(cols.map((c, i) => [c, v[i]])));
+        const updated = (database.exec("SELECT MAX(last_seen) FROM v_listings")[0]?.values[0][0]) || "—";
+        setDb(database); setAll(rows); setMeta({ n: rows.length, updated }); setStatus("ready");
+      } catch (e) { setStatus("error:" + e.message); }
+    })();
+  }, []);
+
+  const options = useMemo(() => {
+    const uniq = k => [...new Set(all.map(r => r[k]).filter(v => v && v !== "?"))].sort();
+    return { localities: uniq("locality"), builders: uniq("builder"), sources: uniq("source"),
+             types: uniq("type"), listings: uniq("listing"), bhks: uniq("bhk") };
+  }, [all]);
+
+  // Distinct value lists per (non-numeric) column for the modern column-filter menus.
+  const colValues = useMemo(() => {
+    const m = {};
+    for (const c of COLS) {
+      if (c.num) continue;
+      const s = new Set(all.map(r => (r[c.k] == null || r[c.k] === "") ? "—" : String(r[c.k])));
+      m[c.k] = [...s].sort((a, b) => a.localeCompare(b));
+    }
+    return m;
+  }, [all]);
+
+  const filtered = useMemo(() => {
+    const minCr = parseFloat(f.minCr), maxCr = parseFloat(f.maxCr), minSize = parseFloat(f.minSize);
+    const q = f.q.trim().toLowerCase();
+    let rows = all.filter(r => {
+      if (q) {
+        const hay = [r.builder, r.locality, r.description, r.source, r.rera_id].join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (f.locality && (r.locality || "").toLowerCase() !== f.locality.toLowerCase()) return false;
+      if (f.type && r.type !== f.type) return false;
+      if (f.listing && r.listing !== f.listing) return false;
+      if (f.builder && r.builder !== f.builder) return false;
+      if (f.source && r.source !== f.source) return false;
+      if (f.onlyTarget && !TARGET.has((r.locality || "").toLowerCase())) return false;
+      const priced = r.price_cr != null;
+      if (f.onlyPriced && !priced) return false;
+      if (!isNaN(minCr) && priced && r.price_cr < minCr) return false;
+      if (!isNaN(maxCr) && priced && r.price_cr > maxCr) return false;
+      if (!isNaN(minCr) && !priced && f.onlyPriced) return false;
+      if (!isNaN(minSize) && r.size_sqft != null && r.size_sqft < minSize) return false;
+      if (f.possession && r.possession && r.possession > f.possession) return false;
+      // per-column grid filters (modern column menus)
+      for (const c of COLS) {
+        const sel = colSel[c.k];
+        if (!sel) continue;
+        if (c.num) {
+          const val = r[c.k];
+          if (sel.min !== "" && sel.min != null && (val == null || val < parseFloat(sel.min))) return false;
+          if (sel.max !== "" && sel.max != null && (val == null || val > parseFloat(sel.max))) return false;
+        } else if (sel.length) {
+          const v = (r[c.k] == null || r[c.k] === "") ? "—" : String(r[c.k]);
+          if (!sel.includes(v)) return false;
+        }
+      }
+      return true;
+    });
+    const { k, dir } = sort, mul = dir === "asc" ? 1 : -1;
+    rows = [...rows].sort((a, b) => {
+      let x = a[k], y = b[k];
+      const nx = parseFloat(x), ny = parseFloat(y);
+      if (!isNaN(nx) && !isNaN(ny)) { x = nx; y = ny; }
+      if (x == null) return 1; if (y == null) return -1;
+      return (x < y ? -1 : x > y ? 1 : 0) * mul;
+    });
+    return rows;
+  }, [all, f, sort, colSel]);
+
+  const stats = useMemo(() => {
+    const priced = filtered.filter(r => r.price_cr != null);
+    const avg = priced.length ? (priced.reduce((s, r) => s + r.price_cr, 0) / priced.length) : null;
+    const targets = filtered.filter(r => TARGET.has((r.locality || "").toLowerCase())).length;
+    return { total: filtered.length, targets, avg, villas: filtered.filter(r => r.type === "villa").length };
+  }, [filtered]);
+
+  const applyCriteria = () => setF({ ...EMPTY, minCr: String(CRITERIA.minCr), maxCr: String(CRITERIA.maxCr),
+                                     minSize: String(CRITERIA.minSqft), possession: CRITERIA.possession });
+
+  const exportCsv = useCallback(() => {
+    const cols = COLS.map(c => c.k);
+    const esc = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+    const lines = [cols.join(","), ...filtered.map(r => cols.map(c => esc(r[c])).join(","))];
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+    a.download = "properties.csv"; a.click();
+  }, [filtered]);
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
+      <header className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">🏙️ Bangalore Premium Property Assistant</h1>
+          <p className="text-sm text-slate-500">Whitefield &amp; Marathahalli · apartments (Tier-1) + villas · ₹3–5 Cr · possession ≤ Jun 2028</p>
+        </div>
+        <div className="text-right text-xs text-slate-400">
+          {status === "ready" ? <span>{meta.n} listings · updated {String(meta.updated).slice(0, 10)}</span>
+            : status === "loading" ? <span className="animate-pulse">loading database…</span>
+            : <span className="text-rose-500">{status.replace("error:", "⚠ ")}</span>}
+        </div>
+      </header>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <Stat label="Matching" value={stats.total} sub="current filters" accent="text-indigo-600" />
+        <Stat label="In target areas" value={stats.targets} sub="Whitefield / Marathahalli" accent="text-amber-600" />
+        <Stat label="Villas" value={stats.villas} accent="text-violet-600" />
+        <Stat label="Avg price" value={fmtCr(stats.avg)} sub="priced only" accent="text-emerald-600" />
+      </div>
+
+      <div className="space-y-4">
+        <Filters f={f} set={setF} options={options} onReset={() => { setF(EMPTY); setColSel({}); }} onCriteria={applyCriteria} />
+
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-slate-500">
+            {filtered.length} result{filtered.length === 1 ? "" : "s"}
+            {Object.keys(colSel).length > 0 &&
+              <button onClick={() => setColSel({})} className="ml-3 text-xs text-indigo-600 hover:underline">clear column filters</button>}
+          </div>
+          <button onClick={exportCsv} className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">⬇ Export CSV</button>
+        </div>
+
+        <Table rows={filtered} sort={sort} setSort={setSort} colSel={colSel} setColSel={setColSel} colValues={colValues} />
+        {db && <SqlPanel db={db} />}
+      </div>
+
+      <footer className="mt-8 text-center text-xs text-slate-400">
+        Static viewer · SQLite-in-browser via sql.js · refresh data with <code className="bg-slate-100 px-1 rounded">python -m src.export_web</code>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
