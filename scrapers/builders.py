@@ -38,6 +38,16 @@ SPECS: dict[str, BuilderSpec] = {
         # residential-only: skip commercial/retail/hospitality that share /projects/bengaluru
         project_re=r"brigadegroup\.com/residential/projects/bengaluru/[^/]+$",
     ),
+    "Puravankara": BuilderSpec(
+        name="Puravankara",
+        list_urls=[
+            "https://www.puravankara.com/residential/bengaluru",
+            "https://www.puravankara.com/bengaluru/",
+        ],
+        # project detail pages: /residential/bengaluru/<project-slug> (the bare
+        # /residential/bengaluru listing page has no trailing slug -> excluded)
+        project_re=r"puravankara\.com/residential/bengaluru/[^/]+$",
+    ),
 }
 
 
