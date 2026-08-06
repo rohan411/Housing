@@ -43,10 +43,17 @@ const fmtCr = v => (v == null ? "—" : "₹" + Number(v).toFixed(2) + " Cr");
 const cls = (...a) => a.filter(Boolean).join(" ");
 
 /* ---------- small UI atoms ---------- */
-function Stat({ label, value, sub, accent }) {
+function Stat({ label, value, sub, accent, onClick, active }) {
+  const clickable = !!onClick;
   return (
-    <div className="rounded-xl bg-white border border-slate-200 shadow-sm px-4 py-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
+    <div onClick={onClick} role={clickable ? "button" : undefined}
+      title={clickable ? "Click to filter" : undefined}
+      className={cls("rounded-xl bg-white border shadow-sm px-4 py-3 transition select-none",
+        clickable && "cursor-pointer hover:shadow-md hover:border-slate-300 active:scale-[0.99]",
+        active ? "border-indigo-500 ring-2 ring-indigo-200" : "border-slate-200")}>
+      <div className="text-xs font-medium uppercase tracking-wide text-slate-400 flex items-center gap-1">
+        {label}{active && <span className="text-[9px] font-bold text-indigo-500">● ON</span>}
+      </div>
       <div className={cls("text-2xl font-bold mt-0.5", accent || "text-slate-800")}>{value}</div>
       {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
     </div>
@@ -470,9 +477,12 @@ function App() {
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <Stat label="Matching" value={stats.total} sub="current filters" accent="text-indigo-600" />
-        <Stat label="In target areas" value={stats.targets} sub="Whitefield / Marathahalli" accent="text-amber-600" />
-        <Stat label="Villas" value={stats.villas} accent="text-violet-600" />
+        <Stat label="Matching" value={stats.total} sub="click to reset filters" accent="text-indigo-600"
+              onClick={() => { setF(EMPTY); setColSel({}); }} />
+        <Stat label="In target areas" value={stats.targets} sub="Whitefield / Marathahalli" accent="text-amber-600"
+              onClick={() => setF(p => ({ ...p, onlyTarget: !p.onlyTarget }))} active={f.onlyTarget} />
+        <Stat label="Villas" value={stats.villas} sub="click to show villas" accent="text-violet-600"
+              onClick={() => setF(p => ({ ...p, type: p.type === "villa" ? "" : "villa" }))} active={f.type === "villa"} />
         <Stat label="Avg price" value={fmtCr(stats.avg)} sub="priced only" accent="text-emerald-600" />
       </div>
 
