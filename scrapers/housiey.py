@@ -51,6 +51,19 @@ LANDING = [
     for b in ["3", "3-5", "4", "4-5", "5"]
 ]
 
+# Villa landing pages. Villas may be from ANY builder (per the criteria), so we
+# crawl the Whitefield-specific villa list plus the broader Bangalore/East-
+# Bangalore villa lists — this is what surfaces non-Tier-1 villa developers
+# (NVT, DSR, Adarsh, etc.) we'd otherwise miss. Housiey mixes other-city
+# projects into these lists, so a Bangalore-scope guard in run() drops those.
+VILLA_LANDING = [
+    "https://housiey.com/villas-in-whitefield-bangalore",
+    "https://housiey.com/villas-in-marathahalli-bangalore",
+    "https://housiey.com/villas-in-sarjapur-road-bangalore",
+    "https://housiey.com/villas-in-varthur-bangalore",
+    "https://housiey.com/villas-in-bangalore",
+]
+
 
 def discover(page, url: str) -> list[str]:
     try:
@@ -86,6 +99,8 @@ def scrape_detail(page, url: str) -> dict:
         "size_sqft": parse_size_sqft(body),
         "rera_id": rera.group(1) if rera else None,
         "possession": poss,
+        # Bangalore-scope guard: villa landing pages mix in other-city projects.
+        "in_blr": ("bangalore" in body.lower() or "bengaluru" in body.lower()),
         # Classify from the project name + address; do NOT force the landing
         # locality (Housiey landing pages leak nearby-area projects). Names
         # usually carry the real locality (e.g. "…Whitefield", "…Sarjapur").
@@ -112,6 +127,9 @@ def run(verbose=True) -> dict:
             for u in discover(page, lurl):
                 targets.setdefault(u, locality)
                 bhk_seen.setdefault(u, set()).update(nums)
+        for lurl in VILLA_LANDING:  # villa lists (any builder); locality from detail
+            for u in discover(page, lurl):
+                targets.setdefault(u, None)
         found = len(targets)
         if verbose:
             print(f"[Housiey] discovered {found} unique Whitefield project pages")
@@ -127,6 +145,11 @@ def run(verbose=True) -> dict:
 
             bname, score = match_builder(rec["name"], builders)
             is_tier1 = score >= MATCH_THRESHOLD
+            # Bangalore-scope guard: drop other-city projects Housiey mixes into
+            # the villa lists (keep anything that resolved to a Bangalore locality).
+            if not rec["in_blr"] and not rec["locality"]:
+                skipped += 1
+                continue
             # Criteria: apartments must be Tier-1; villas may be any builder.
             if rec["property_type"] == "apartment" and not is_tier1:
                 skipped += 1
