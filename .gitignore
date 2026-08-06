@@ -14,3 +14,6 @@ venv/
 
 # Playwright
 .playwright/
+
+# NoBroker persistent login session (contains your auth cookies — never commit)
+.nbsession/

@@ -1,0 +1,46 @@
+name: Deploy viewer to GitHub Pages
+
+# Zero-cost hosting for the static viewer (web/) using GitHub Pages.
+#
+# One-time activation:
+#   Settings > Pages > Build and deployment > Source: "GitHub Actions".
+#   (On the free plan, Pages requires the repository to be PUBLIC. On
+#    GitHub Pro/Team it also works on private repos.)
+#
+# After activation, every push to main that touches web/ publishes the site to
+#   https://<user>.github.io/<repo>/   (shown in the workflow summary + Settings > Pages)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload web/ as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "web"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

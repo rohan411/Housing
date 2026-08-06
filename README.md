@@ -58,6 +58,10 @@ python -m scrapers.builders --all       # all builder sites (Prestige/Sobha/Brig
 python -m scrapers.housiey              # aggregator (Whitefield; villas + Tier-1 apts)
 python -m scrapers.portals --all        # portals (best-effort; Housing.com/NoBroker block)
 
+# NoBroker needs a logged-in session (persisted to .nbsession/, gitignored):
+python -m scrapers.nobroker --login      # one-time: opens a browser, log in, auto-detected
+python -m scrapers.nobroker              # then scrape reusing the saved session
+
 # 6. publish the data snapshot for the viewer
 python -m src.export_web                # writes web/properties.db + web/properties.db.js
 
@@ -89,8 +93,31 @@ cards, sortable columns, a collapsible raw read-only **SQL box** over the
 python -m src.export_web               # rebuild web/properties.db(.js) + v_listings view
 ```
 
-**Deploy to GitHub Pages:** commit `web/` (incl. `web/properties.db` and
-`web/properties.db.js`), then repo Settings → Pages → serve from `/web`.
+## Deploy / host the viewer (free)
+The viewer is a static folder (`web/`), so any static host works. Two wired-up paths:
+
+**A. GitHub Pages** (simplest — one click) — workflow: `.github/workflows/pages.yml`
+1. Repo **Settings → Pages → Source: "GitHub Actions"**.
+2. Free-plan Pages requires the repo to be **public** (Settings → General → Change visibility).
+   On **GitHub Pro/Team** it also works while private.
+3. Push (or "Run workflow" on the *Deploy viewer to GitHub Pages* action). Live at
+   `https://<user>.github.io/Housing/`.
+
+**B. Azure Static Web Apps** (works with a **private** repo, Free SKU) — workflow:
+`.github/workflows/azure-static-web-apps.yml`. Needs a **personal** Azure login
+(the corporate tenant here is MFA/policy-locked). Once logged into your own subscription:
+```bash
+az group create -n rg-housing -l eastasia
+az staticwebapp create -n housing-viewer -g rg-housing -l eastasia --sku Free
+TOKEN=$(az staticwebapp secrets list -n housing-viewer -g rg-housing \
+        --query "properties.apiKey" -o tsv)
+gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN --repo rohan411/Housing --body "$TOKEN"
+```
+Then push (or run the *Deploy viewer to Azure Static Web Apps* action). Live at the
+`*.azurestaticapps.net` URL from `az staticwebapp show -n housing-viewer -g rg-housing`.
+
+> Re-run `python -m src.export_web` after any scrape, commit `web/properties.db*`, and the
+> chosen deploy workflow republishes automatically.
 
 ## Query + change tracking (CLI)
 ```bash

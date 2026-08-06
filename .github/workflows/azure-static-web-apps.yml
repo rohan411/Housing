@@ -1,0 +1,32 @@
+name: Deploy viewer to Azure Static Web Apps
+
+# Free hosting for the static viewer (web/). Set up once:
+#   1. In the Azure Portal create a "Static Web App" (Free plan), source: Other.
+#   2. Copy its "deployment token".
+#   3. In this repo: Settings > Secrets and variables > Actions > New secret
+#      name:  AZURE_STATIC_WEB_APPS_API_TOKEN   value: <the deployment token>
+# After that, every push to main publishes web/ to your free *.azurestaticapps.net URL.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/azure-static-web-apps.yml"
+  workflow_dispatch:
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    name: Build and Deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: "web"      # the static site lives here
+          output_location: ""      # no build step — plain HTML
+          skip_app_build: true
