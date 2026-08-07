@@ -108,12 +108,7 @@ function Filters({ f, set, options, onReset, onCriteria }) {
         </Field>
         <Field label="Locality">{Sel("locality", options.localities)}</Field>
         <Field label="Type">{Sel("type", options.types)}</Field>
-        <Field label="Listing">{Sel("listing", options.listings)}</Field>
         <Field label="Builder">{Sel("builder", options.builders)}</Field>
-        <Field label="Source">{Sel("source", options.sources)}</Field>
-        <Field label="Min ₹Cr"><input type="number" step="0.1" className={cls(inputCls, "w-24")} value={f.minCr} onChange={upd("minCr")} placeholder="3" /></Field>
-        <Field label="Max ₹Cr"><input type="number" step="0.1" className={cls(inputCls, "w-24")} value={f.maxCr} onChange={upd("maxCr")} placeholder="5" /></Field>
-        <Field label="Min sqft"><input type="number" step="50" className={cls(inputCls, "w-24")} value={f.minSize} onChange={upd("minSize")} placeholder="2000" /></Field>
         <Field label="Possession ≤"><input type="date" className={inputCls} value={f.possession} onChange={upd("possession")} /></Field>
       </div>
       <div className="flex flex-wrap gap-4 items-center mt-3">
@@ -453,8 +448,7 @@ function App() {
     return { total: filtered.length, targets, avg, villas: filtered.filter(r => r.type === "villa").length };
   }, [filtered]);
 
-  const applyCriteria = () => setF({ ...EMPTY, minCr: String(CRITERIA.minCr), maxCr: String(CRITERIA.maxCr),
-                                     minSize: String(CRITERIA.minSqft), possession: CRITERIA.possession });
+  const applyCriteria = () => setF({ ...EMPTY, possession: CRITERIA.possession });
 
   const exportCsv = useCallback(() => {
     const cols = COLS.map(c => c.k);
