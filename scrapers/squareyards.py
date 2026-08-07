@@ -47,6 +47,12 @@ MAX_PAGES = 6         # per locality; stop early when a page adds nothing new
 SEARCH = {
     "whitefield":   "https://www.squareyards.com/sale/property-for-sale-in-whitefield-bangalore",
     "marathahalli": "https://www.squareyards.com/sale/property-for-sale-in-marathahalli-bangalore",
+    # Adjacent Whitefield-belt pockets — same premium micro-market, more villa/resale stock.
+    "varthur":      "https://www.squareyards.com/sale/property-for-sale-in-varthur-bangalore",
+    "gunjur":       "https://www.squareyards.com/sale/property-for-sale-in-gunjur-bangalore",
+    "panathur":     "https://www.squareyards.com/sale/property-for-sale-in-panathur-bangalore",
+    "kadugodi":     "https://www.squareyards.com/sale/property-for-sale-in-kadugodi-bangalore",
+    "hoodi":        "https://www.squareyards.com/sale/property-for-sale-in-hoodi-bangalore",
 }
 
 # Any `/<verb>-...-<size>-sq-ft-<type>-in-<project>/<id>` listing link.
