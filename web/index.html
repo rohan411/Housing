@@ -211,7 +211,7 @@ function ColMenu({ c, open, setOpen, sel, setSel, values }) {
       {ReactDOM.createPortal(
         <>
           <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(null); }} />
-          <div data-column-filter-menu onClick={(e) => e.stopPropagation()}
+          <div onClick={(e) => e.stopPropagation()}
                style={{ position: "fixed", top, left, width: W }}
                className="z-50 rounded-xl border border-slate-200 bg-white shadow-xl p-2.5 font-normal normal-case text-left text-slate-700">
             {body}
@@ -228,21 +228,6 @@ function ColMenu({ c, open, setOpen, sel, setSel, values }) {
 
 function Table({ rows, sort, setSort, colSel, setColSel, colValues }) {
   const [openCol, setOpenCol] = useState(null);
-  // Close the (fixed-positioned) filter popover when the user actually scrolls
-  // the page/table, so it never floats away from its funnel button. A short
-  // time-guard ignores the scroll/resize the *opening* itself triggers on
-  // mobile (tap momentum + virtual-keyboard viewport resize), which otherwise
-  // made the menu open and immediately close. Capture phase catches inner scroll.
-  useEffect(() => {
-    if (!openCol) return;
-    const openedAt = Date.now();
-    const close = (event) => {
-      if (event.target instanceof Element && event.target.closest("[data-column-filter-menu]")) return;
-      if (Date.now() - openedAt > 400) setOpenCol(null);
-    };
-    window.addEventListener("scroll", close, true);
-    return () => window.removeEventListener("scroll", close, true);
-  }, [openCol]);
   const arrow = (k) => (sort.k === k ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
   const click = (k) => setSort(s => ({ k, dir: s.k === k && s.dir === "asc" ? "desc" : "asc" }));
   const setSel = (k, val) => setColSel(prev => {
