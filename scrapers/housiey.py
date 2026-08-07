@@ -64,6 +64,15 @@ VILLA_LANDING = [
     "https://housiey.com/villas-in-bangalore",
 ]
 
+# Directly-seeded project pages that landing-page discovery misses. Housiey's
+# villa lists are flaky (they 308-redirect for bots) and omit some real villa
+# developers, so we pin known-good `/projects/<slug>` detail pages here. These
+# are still passed through the same Bangalore-scope + criteria guards in run().
+# NVT Oikos = NVT Quality Lifestyle's Whitefield villas (RERA-registered).
+SEED_PROJECTS = [
+    "https://housiey.com/projects/nvt-oikos",
+]
+
 
 def discover(page, url: str) -> list[str]:
     try:
@@ -130,6 +139,8 @@ def run(verbose=True) -> dict:
         for lurl in VILLA_LANDING:  # villa lists (any builder); locality from detail
             for u in discover(page, lurl):
                 targets.setdefault(u, None)
+        for u in SEED_PROJECTS:  # pinned project pages discovery misses (e.g. NVT)
+            targets.setdefault(u, None)
         found = len(targets)
         if verbose:
             print(f"[Housiey] discovered {found} unique Whitefield project pages")
