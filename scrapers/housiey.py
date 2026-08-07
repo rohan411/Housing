@@ -72,6 +72,7 @@ VILLA_LANDING = [
 SEED_PROJECTS = [
     "https://housiey.com/projects/nvt-oikos",
     "https://housiey.com/projects/trendcon-aurelius",
+    "https://housiey.com/projects/sumadhura-folium",
 ]
 
 

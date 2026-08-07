@@ -50,8 +50,9 @@ TIER1_BUILDERS = {
     "Concorde Group":      ["Concorde", "Concorde Group Builders"],
     "Adarsh Developers":   ["Adarsh", "Adarsh Developers Pvt Ltd", "Adarsh Palm Retreat"],
     "Nitesh Estates":      ["Nitesh", "Nitesh Estates Ltd"],
-    # --- Tier 3 (only SNN per user) ---
+    # --- Tier 3 (only SNN + Sumadhura per user) ---
     "SNN Builders":        ["SNN", "SNN Raj", "SNN Estates"],
+    "Sumadhura":           ["Sumadhura Infracon", "Sumadhura Group", "Sumadhura Constructions"],
     # --- retained (not on user list but active locally) ---
     "Lodha":               ["Lodha Group", "Macrotech", "Macrotech Developers"],
 }
@@ -66,7 +67,7 @@ BUILDER_TIERS = {
     "Century Real Estate": "tier2", "L&T Realty": "tier2", "Mantri Developers": "tier2",
     "Casagrand": "tier2", "Rohan Builders": "tier2", "Concorde Group": "tier2",
     "Adarsh Developers": "tier2", "Nitesh Estates": "tier2",
-    "SNN Builders": "tier3",
+    "SNN Builders": "tier3", "Sumadhura": "tier3",
     "Lodha": "tier1",
 }
 
