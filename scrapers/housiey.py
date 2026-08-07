@@ -71,6 +71,7 @@ VILLA_LANDING = [
 # NVT Oikos = NVT Quality Lifestyle's Whitefield villas (RERA-registered).
 SEED_PROJECTS = [
     "https://housiey.com/projects/nvt-oikos",
+    "https://housiey.com/projects/trendcon-aurelius",
 ]
 
 
