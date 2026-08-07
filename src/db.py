@@ -32,13 +32,14 @@ def init_schema(conn: sqlite3.Connection) -> None:
 
 
 def seed(conn: sqlite3.Connection) -> None:
-    from src.config import TIER1_BUILDERS, SOURCES
+    from src.config import TIER1_BUILDERS, BUILDER_TIERS, SOURCES
 
     for name, aliases in TIER1_BUILDERS.items():
+        tier = BUILDER_TIERS.get(name, "tier1")
         conn.execute(
-            "INSERT INTO builders (name, tier, aliases, active) VALUES (?, 'tier1', ?, 1) "
-            "ON CONFLICT(name) DO UPDATE SET aliases=excluded.aliases, tier='tier1', active=1",
-            (name, json.dumps(aliases)),
+            "INSERT INTO builders (name, tier, aliases, active) VALUES (?, ?, ?, 1) "
+            "ON CONFLICT(name) DO UPDATE SET aliases=excluded.aliases, tier=excluded.tier, active=1",
+            (name, tier, json.dumps(aliases)),
         )
 
     for s in SOURCES:

@@ -16,23 +16,58 @@ CRITERIA = {
     "tier1_only_for": ["apartment"],
 }
 
-# --- Tier-1 builders (apartments) ------------------------------------------
+# --- Accepted builders (apartments) ----------------------------------------
 # name -> list of alias strings used for normalization / matching.
+# Apartments are kept only if their project matches one of these builders
+# (villas are kept regardless of builder). Kept as TIER1_BUILDERS for import
+# compatibility; BUILDER_TIERS below records the true tier for each.
 TIER1_BUILDERS = {
+    # --- Tier 1 ---
     "Prestige":            ["Prestige Group", "Prestige Estates", "Prestige Estates Projects"],
     "Sobha":               ["Sobha Ltd", "Sobha Limited", "Sobha Developers"],
     "Brigade":             ["Brigade Group", "Brigade Enterprises"],
-    "Puravankara":         ["Puravankara Ltd", "Purva", "Provident"],
     "Godrej":              ["Godrej Properties", "Godrej Properties Ltd", "GPL"],
+    "Puravankara":         ["Puravankara Ltd", "Purva", "Provident", "Provident Housing"],
     "Embassy":             ["Embassy Group", "Embassy Property Developments"],
     "Total Environment":   ["Total Environment Building Systems", "TE",
                             "Pursuit of a Radical Rhapsody", "Windmills of Your Mind",
                             "After the Rain", "In That Quiet Earth", "Learning to Fly",
                             "The Magic Faraway Tree", "Down by the Water", "Jaj's Serein",
                             "Songs of the Wind", "Two Story Wonders"],
-    "Assetz":              ["Assetz Property Group", "Assetz Homes"],
+    "Birla Estates":       ["Birla Estate", "Birla", "Birla Trimaya"],
+    "Tata Housing":        ["Tata Realty", "Tata Value Homes", "Tata Housing Development"],
+    # --- Tier 2 ---
+    "Shriram Properties":  ["Shriram", "Shriram Properties Ltd"],
+    "Salarpuria Sattva":   ["Salarpuria", "Sattva Group", "Sattva", "Salarpuria Sattva Group"],
     "Mahindra Lifespaces": ["Mahindra Lifespace", "Mahindra Lifespaces Developers", "Mahindra Happinest"],
+    "Assetz":              ["Assetz Property Group", "Assetz Homes"],
+    "Myhna":               ["Myhna Homes", "Mynha"],
+    "Century Real Estate": ["Century", "Century Group", "Century Real Estate Holdings"],
+    "L&T Realty":          ["L&T", "Larsen & Toubro Realty", "LnT Realty"],
+    "Mantri Developers":   ["Mantri", "Mantri Developers Pvt Ltd"],
+    "Casagrand":           ["Casagrand Builder", "Casa Grand", "Casagrand Builder Pvt Ltd"],
+    "Rohan Builders":      ["Rohan", "Rohan Builders & Developers"],
+    "Concorde Group":      ["Concorde", "Concorde Group Builders"],
+    "Adarsh Developers":   ["Adarsh", "Adarsh Developers Pvt Ltd", "Adarsh Palm Retreat"],
+    "Nitesh Estates":      ["Nitesh", "Nitesh Estates Ltd"],
+    # --- Tier 3 (only SNN per user) ---
+    "SNN Builders":        ["SNN", "SNN Raj", "SNN Estates"],
+    # --- retained (not on user list but active locally) ---
     "Lodha":               ["Lodha Group", "Macrotech", "Macrotech Developers"],
+}
+
+# True tier per builder (DB `builders.tier`); default tier1 if unlisted.
+BUILDER_TIERS = {
+    "Prestige": "tier1", "Sobha": "tier1", "Brigade": "tier1", "Godrej": "tier1",
+    "Puravankara": "tier1", "Embassy": "tier1", "Total Environment": "tier1",
+    "Birla Estates": "tier1", "Tata Housing": "tier1",
+    "Shriram Properties": "tier2", "Salarpuria Sattva": "tier2",
+    "Mahindra Lifespaces": "tier2", "Assetz": "tier2", "Myhna": "tier2",
+    "Century Real Estate": "tier2", "L&T Realty": "tier2", "Mantri Developers": "tier2",
+    "Casagrand": "tier2", "Rohan Builders": "tier2", "Concorde Group": "tier2",
+    "Adarsh Developers": "tier2", "Nitesh Estates": "tier2",
+    "SNN Builders": "tier3",
+    "Lodha": "tier1",
 }
 
 # --- Data sources (seed rows for `sources`) --------------------------------
