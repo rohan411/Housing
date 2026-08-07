@@ -211,7 +211,7 @@ function ColMenu({ c, open, setOpen, sel, setSel, values }) {
       {ReactDOM.createPortal(
         <>
           <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(null); }} />
-          <div onClick={(e) => e.stopPropagation()}
+          <div data-column-filter-menu onClick={(e) => e.stopPropagation()}
                style={{ position: "fixed", top, left, width: W }}
                className="z-50 rounded-xl border border-slate-200 bg-white shadow-xl p-2.5 font-normal normal-case text-left text-slate-700">
             {body}
@@ -236,7 +236,10 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues }) {
   useEffect(() => {
     if (!openCol) return;
     const openedAt = Date.now();
-    const close = () => { if (Date.now() - openedAt > 400) setOpenCol(null); };
+    const close = (event) => {
+      if (event.target instanceof Element && event.target.closest("[data-column-filter-menu]")) return;
+      if (Date.now() - openedAt > 400) setOpenCol(null);
+    };
     window.addEventListener("scroll", close, true);
     return () => window.removeEventListener("scroll", close, true);
   }, [openCol]);
