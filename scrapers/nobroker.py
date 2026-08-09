@@ -90,9 +90,9 @@ _PRICE_MIN = CRITERIA["price_min_inr"]
 _PRICE_MAX = CRITERIA["price_max_inr"]
 
 # Villa budget band (user preference): floor 2Cr (sub-2Cr NoBroker villas are
-# not genuine premium stock) and ceiling 6Cr.
+# not genuine premium stock) and ceiling 10Cr.
 _VILLA_PRICE_MIN = 20000000
-_VILLA_PRICE_MAX = 60000000
+_VILLA_PRICE_MAX = 100000000
 
 
 def _bhk_from_type(t):
