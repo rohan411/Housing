@@ -340,7 +340,7 @@ function App() {
   const [status, setStatus] = useState("loading");
   const [f, setF] = useState(EMPTY);
   const [colSel, setColSel] = useState({});
-  const [sort, setSort] = useState({ k: "price_cr", dir: "asc" });
+  const [sort, setSort] = useState({ k: "first_seen", dir: "asc" });
 
   useEffect(() => {
     (async () => {
