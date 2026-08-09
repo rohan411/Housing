@@ -53,12 +53,25 @@ MATCH_THRESHOLD = 88  # rapidfuzz score to accept a Tier-1 builder for apartment
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
-# Target localities -> (lat, lon). Radius search is centred here.
+# Villa search centres (wide radius below). Kept tight to the two core areas;
+# the 25km villa radius already reaches the whole ORR belt from here.
 LOCALITIES = {
     "whitefield":   (12.9698, 77.7499),
     "marathahalli": (12.9591, 77.6974),
 }
-RADIUS_KM = 3.5         # tight radius for apartments (must stay near target)
+# Apartment search centres — the ORR belt (Sarjapur -> Bellandur -> Marathahalli
+# -> Whitefield) plus a north (Hebbal) and an east (KR Puram) anchor. With a
+# 7km radius these overlapping circles cover the whole corridor the user cares
+# about while the Tier-1 + 2000sqft + price-band filters keep the results clean.
+APT_LOCALITIES = {
+    "sarjapur":     (12.8646, 77.7866),
+    "bellandur":    (12.9260, 77.6762),
+    "marathahalli": (12.9591, 77.6974),
+    "whitefield":   (12.9698, 77.7499),
+    "hebbal":       (13.0358, 77.5970),   # north Bangalore
+    "kr puram":     (13.0075, 77.6957),   # east Bangalore / Old Madras Road
+}
+APT_RADIUS_KM = 7       # wider radius for apartments (ORR corridor)
 VILLA_RADIUS_KM = 25    # wide radius for villas (premium villa stock is thin;
                         # user asked NOT to restrict villas by radius or price)
 MAX_PAGES = 25          # per locality; stop early when a page returns no data
@@ -158,17 +171,18 @@ def run(headed: bool = False, verbose: bool = True) -> dict:
         except Exception:  # noqa: BLE001
             pass
 
-        # Pass 1: tight radius -> apartments (strict) + nearby villas.
-        # Pass 2: wide radius  -> villas only (relaxed; no radius/price limit).
+        # Pass 1: apartment corridor -> apartments (strict) + villas that fall
+        #         within these tighter circles.
+        # Pass 2: wide radius -> villas only (relaxed; no radius/price limit).
         # Each raw record is tagged with whether it came from the wide pass so
-        # the filter loop can drop wide-pass apartments (they must stay near
-        # target); villas are accepted from either pass.
+        # the filter loop can drop wide-pass apartments (they must stay within
+        # the ORR corridor); villas are accepted from either pass.
         raw: list = []
-        for loc, (lat, lon) in LOCALITIES.items():
-            recs = _fetch_locality(ctx, lat, lon, RADIUS_KM)
+        for loc, (lat, lon) in APT_LOCALITIES.items():
+            recs = _fetch_locality(ctx, lat, lon, APT_RADIUS_KM)
             if verbose:
                 print(f"[NoBroker] {loc}: fetched {len(recs)} raw listings "
-                      f"(radius {RADIUS_KM} km)")
+                      f"(radius {APT_RADIUS_KM} km)")
             raw.extend((d, False) for d in recs)
         for loc, (lat, lon) in LOCALITIES.items():
             recs = _fetch_locality(ctx, lat, lon, VILLA_RADIUS_KM)
