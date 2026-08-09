@@ -89,6 +89,11 @@ _MIN_SQFT = CRITERIA["min_sqft"]
 _PRICE_MIN = CRITERIA["price_min_inr"]
 _PRICE_MAX = CRITERIA["price_max_inr"]
 
+# Villa budget band (user preference): floor 2Cr (sub-2Cr NoBroker villas are
+# not genuine premium stock) and ceiling 6Cr.
+_VILLA_PRICE_MIN = 20000000
+_VILLA_PRICE_MAX = 60000000
+
 
 def _bhk_from_type(t):
     """NoBroker encodes BHK as e.g. 'BHK3' / 'BHK2'."""
@@ -218,6 +223,11 @@ def run(headed: bool = False, verbose: bool = True) -> dict:
             bid = store.builder_id(conn, bname)
         else:
             if rec["locality"] is None:
+                skipped_villa_loc += 1
+                continue
+            # Villa budget band: keep only 2Cr <= price <= 6Cr (drop sub-2Cr
+            # non-genuine stock and above-ceiling luxury villas).
+            if rec["price_inr"] and not (_VILLA_PRICE_MIN <= rec["price_inr"] <= _VILLA_PRICE_MAX):
                 skipped_villa_loc += 1
                 continue
             bid = store.builder_id(conn, bname) if is_tier1 else None
