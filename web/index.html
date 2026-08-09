@@ -340,7 +340,7 @@ function App() {
   const [status, setStatus] = useState("loading");
   const [f, setF] = useState(EMPTY);
   const [colSel, setColSel] = useState({});
-  const [sort, setSort] = useState({ k: "first_seen", dir: "asc" });
+  const [sort, setSort] = useState({ k: "relevance", dir: "asc" });
 
   useEffect(() => {
     (async () => {
@@ -419,6 +419,30 @@ function App() {
       return true;
     });
     const { k, dir } = sort, mul = dir === "asc" ? 1 : -1;
+    if (k === "relevance") {
+      // Relevance = closeness to the target areas. Whitefield first, then
+      // Marathahalli, then the rest of the ORR belt, then everything else;
+      // ties broken by price ascending.
+      const rank = (r) => {
+        const loc = (r.locality || "").toLowerCase();
+        if (loc.includes("whitefield")) return 0;
+        if (loc.includes("marathahalli")) return 1;
+        const belt = ["varthur","gunjur","panathur","kadugodi","hoodi","brookefield",
+                      "bellandur","sarjapur","kaikondrahalli","hebbal","kr puram",
+                      "krishnarajapuram","nagavara"];
+        if (belt.some(b => loc.includes(b))) return 2;
+        if (loc) return 3;
+        return 4;
+      };
+      rows = [...rows].sort((a, b) => {
+        const ra = rank(a), rb = rank(b);
+        if (ra !== rb) return ra - rb;
+        const pa = parseFloat(a.price_cr), pb = parseFloat(b.price_cr);
+        if (isNaN(pa)) return 1; if (isNaN(pb)) return -1;
+        return pa - pb;
+      });
+      return rows;
+    }
     rows = [...rows].sort((a, b) => {
       let x = a[k], y = b[k];
       const nx = parseFloat(x), ny = parseFloat(y);
