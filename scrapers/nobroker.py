@@ -58,8 +58,10 @@ LOCALITIES = {
     "whitefield":   (12.9698, 77.7499),
     "marathahalli": (12.9591, 77.6974),
 }
-RADIUS_KM = 3.5
-MAX_PAGES = 15          # per locality; stop early when a page returns no data
+RADIUS_KM = 3.5         # tight radius for apartments (must stay near target)
+VILLA_RADIUS_KM = 25    # wide radius for villas (premium villa stock is thin;
+                        # user asked NOT to restrict villas by radius or price)
+MAX_PAGES = 25          # per locality; stop early when a page returns no data
 API = ("https://www.nobroker.in/api/v3/multi/property/BUY/filter"
        "?latitude={lat}&longitude={lon}&radius={r}&pageNo={pg}&city=bangalore")
 # Headers the SPA sends; without these the endpoint returns an empty envelope.
@@ -116,10 +118,10 @@ def normalize_listing(d: dict):
     }
 
 
-def _fetch_locality(ctx, lat: float, lon: float) -> list:
+def _fetch_locality(ctx, lat: float, lon: float, radius: float) -> list:
     out: list = []
     for pg in range(1, MAX_PAGES + 1):
-        ep = API.format(lat=lat, lon=lon, r=RADIUS_KM, pg=pg)
+        ep = API.format(lat=lat, lon=lon, r=radius, pg=pg)
         try:
             r = ctx.request.get(ep, headers=API_HEADERS, timeout=25000)
             data = (r.json() or {}).get("data") or []
@@ -156,18 +158,32 @@ def run(headed: bool = False, verbose: bool = True) -> dict:
         except Exception:  # noqa: BLE001
             pass
 
+        # Pass 1: tight radius -> apartments (strict) + nearby villas.
+        # Pass 2: wide radius  -> villas only (relaxed; no radius/price limit).
+        # Each raw record is tagged with whether it came from the wide pass so
+        # the filter loop can drop wide-pass apartments (they must stay near
+        # target); villas are accepted from either pass.
         raw: list = []
         for loc, (lat, lon) in LOCALITIES.items():
-            recs = _fetch_locality(ctx, lat, lon)
+            recs = _fetch_locality(ctx, lat, lon, RADIUS_KM)
             if verbose:
                 print(f"[NoBroker] {loc}: fetched {len(recs)} raw listings "
                       f"(radius {RADIUS_KM} km)")
-            raw.extend(recs)
+            raw.extend((d, False) for d in recs)
+        for loc, (lat, lon) in LOCALITIES.items():
+            recs = _fetch_locality(ctx, lat, lon, VILLA_RADIUS_KM)
+            if verbose:
+                print(f"[NoBroker] {loc}: fetched {len(recs)} raw listings "
+                      f"(villa radius {VILLA_RADIUS_KM} km)")
+            raw.extend((d, True) for d in recs)
         browser.close()
 
-    for d in raw:
+    for d, wide in raw:
         rec = normalize_listing(d)
         if not rec or rec["id"] in seen:
+            continue
+        # Wide pass contributes villas only; its apartments are too far out.
+        if wide and rec["property_type"] != "villa":
             continue
         seen.add(rec["id"])
         found += 1
