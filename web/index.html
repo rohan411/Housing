@@ -43,6 +43,14 @@ const { useState, useEffect, useMemo, useCallback } = React;
 const TARGET = new Set(["whitefield", "marathahalli"]);
 const CRITERIA = { minCr: 3, maxCr: 5, minSqft: 2000, possession: "2028-06-30" };
 const fmtCr = v => (v == null ? "—" : "₹" + Number(v).toFixed(2) + " Cr");
+// Colour cue by price band so the eye can scan value ranges quickly.
+const priceBand = v => {
+  if (v == null) return "bg-slate-100 text-slate-400 ring-slate-200";
+  if (v < 3) return "bg-sky-100 text-sky-800 ring-sky-300";        // < ₹3 Cr
+  if (v < 5) return "bg-emerald-100 text-emerald-800 ring-emerald-300"; // ₹3–5 Cr (apartment target)
+  if (v < 7) return "bg-amber-100 text-amber-800 ring-amber-300";   // ₹5–7 Cr
+  return "bg-rose-100 text-rose-800 ring-rose-300";                 // ₹7 Cr+
+};
 const cls = (...a) => a.filter(Boolean).join(" ");
 
 /* ---------- small UI atoms ---------- */
@@ -134,12 +142,12 @@ function Filters({ f, set, options, onReset, onCriteria }) {
 const COLS = [
   { k: "source", label: "Source" },
   { k: "builder", label: "Builder" },
+  { k: "price_cr", label: "Price", num: true },
   { k: "description", label: "Details" },
   { k: "bhk", label: "BHK" },
   { k: "type", label: "Type" },
   { k: "listing", label: "Listing" },
   { k: "locality", label: "Locality" },
-  { k: "price_cr", label: "Price", num: true },
   { k: "size_sqft", label: "Sq ft", num: true },
   { k: "possession", label: "Possession" },
   { k: "rera_id", label: "RERA" },
@@ -263,6 +271,11 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues }) {
                 <tr key={r.id} className={cls("border-t border-slate-100 hover:bg-indigo-50/40", tgt && "bg-amber-50/40")}>
                   <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.source}</td>
                   <td className="px-3 py-2 whitespace-nowrap font-medium">{r.builder}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-right">
+                    {r.price_cr != null
+                      ? <span className={cls("inline-block rounded-md px-2 py-0.5 tabular-nums font-bold ring-1", priceBand(r.price_cr))}>{fmtCr(r.price_cr)}</span>
+                      : <span className="text-slate-300">—</span>}
+                  </td>
                   <td className="px-3 py-2 max-w-sm truncate" title={r.description || ""}>
                     {r.url ? <a href={r.url} target="_blank" rel="noopener" className="text-indigo-600 hover:underline">{r.description || "link"}</a> : (r.description || "—")}
                   </td>
@@ -276,7 +289,6 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues }) {
                   <td className="px-3 py-2 whitespace-nowrap">
                     {tgt ? <span className="text-amber-600 font-semibold">★ {r.locality}</span> : (r.locality || "?")}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmtCr(r.price_cr)}</td>
                   <td className={cls("px-3 py-2 text-right tabular-nums", r.size_sqft >= 2000 ? "text-emerald-700 font-semibold" : "text-slate-500")}>
                     {r.size_sqft ? (r.size_sqft >= 2000 ? "✓ " + r.size_sqft : r.size_sqft) : "—"}
                   </td>
