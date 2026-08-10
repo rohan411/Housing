@@ -38,6 +38,7 @@ SELECT
     p.rera_id                              AS rera_id,
     l.description                          AS description,
     l.url                                  AS url,
+    l.favourite                            AS favourite,
     l.first_seen_at                        AS first_seen,
     l.last_seen_at                         AS last_seen
 FROM listings l
