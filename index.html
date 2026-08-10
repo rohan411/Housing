@@ -269,7 +269,7 @@ function ColMenu({ c, open, setOpen, sel, setSel, values }) {
   );
 }
 
-function Table({ rows, sort, setSort, colSel, setColSel, colValues }) {
+function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete }) {
   const [openCol, setOpenCol] = useState(null);
   const arrow = (k) => (sort.k === k ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
   const click = (k) => setSort(s => ({ k, dir: s.k === k && s.dir === "asc" ? "desc" : "asc" }));
@@ -297,6 +297,7 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues }) {
                   </span>
                 </th>
               ))}
+              <th className="px-3 py-2.5 text-right font-semibold text-slate-600 whitespace-nowrap"></th>
             </tr>
           </thead>
           <tbody>
@@ -329,11 +330,17 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues }) {
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.possession || "—"}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-[11px] text-slate-400">{r.rera_id || "—"}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button onClick={() => onDelete(r)} title="Delete listing"
+                            className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 ring-1 ring-transparent hover:ring-rose-200 transition">
+                      🗑️
+                    </button>
+                  </td>
                 </tr>
               );
             })}
             {rows.length === 0 && (
-              <tr><td colSpan={COLS.length} className="px-3 py-10 text-center text-slate-400">No listings match these filters.</td></tr>
+              <tr><td colSpan={COLS.length + 1} className="px-3 py-10 text-center text-slate-400">No listings match these filters.</td></tr>
             )}
           </tbody>
         </table>
@@ -379,6 +386,43 @@ function SqlPanel({ db }) {
   );
 }
 
+/* ---------- delete confirmation overlay ---------- */
+function ConfirmModal({ row, onCancel, onConfirm }) {
+  useEffect(() => {
+    if (!row) return;
+    const h = (e) => { if (e.key === "Escape") onCancel(); if (e.key === "Enter") onConfirm(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [row, onCancel, onConfirm]);
+  if (!row) return null;
+  return ReactDOM.createPortal(
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 p-5">
+        <div className="flex items-start gap-3">
+          <div className="text-2xl">🗑️</div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-slate-800">Delete this listing?</h3>
+            <p className="text-sm text-slate-500 mt-1">It will be hidden from your grid. You can restore hidden listings anytime.</p>
+          </div>
+        </div>
+        <div className="mt-4 rounded-xl bg-slate-50 border border-slate-200 p-3 text-sm">
+          <div className="font-semibold text-slate-800 truncate">{row.description || row.builder || ("Listing #" + row.id)}</div>
+          <div className="text-slate-500 mt-0.5 flex flex-wrap gap-x-2">
+            <span>{row.source}</span>
+            {row.locality && <span>· {row.locality}</span>}
+            {row.price_cr != null && <span>· {fmtCr(row.price_cr)}</span>}
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onCancel} className="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm font-semibold hover:bg-slate-200">Cancel</button>
+          <button onClick={onConfirm} className="px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 shadow-sm">Delete</button>
+        </div>
+      </div>
+    </div>,
+    document.body);
+}
+
 /* ---------- app ---------- */
 function App() {
   const [db, setDb] = useState(null);
@@ -388,6 +432,26 @@ function App() {
   const [f, setF] = useState(EMPTY);
   const [colSel, setColSel] = useState({});
   const [sort, setSort] = useState({ k: "relevance", dir: "asc" });
+  const [deletedIds, setDeletedIds] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("deletedIds") || "[]")); }
+    catch { return new Set(); }
+  });
+  const [pendingDelete, setPendingDelete] = useState(null);
+
+  const confirmDelete = useCallback(() => {
+    setDeletedIds(prev => {
+      const next = new Set(prev);
+      if (pendingDelete) next.add(pendingDelete.id);
+      localStorage.setItem("deletedIds", JSON.stringify([...next]));
+      return next;
+    });
+    setPendingDelete(null);
+  }, [pendingDelete]);
+
+  const restoreAll = useCallback(() => {
+    setDeletedIds(new Set());
+    localStorage.removeItem("deletedIds");
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -434,6 +498,7 @@ function App() {
     const minCr = parseFloat(f.minCr), maxCr = parseFloat(f.maxCr), minSize = parseFloat(f.minSize);
     const q = f.q.trim().toLowerCase();
     let rows = all.filter(r => {
+      if (deletedIds.has(r.id)) return false;
       if (q) {
         const hay = [r.builder, r.locality, r.description, r.source, r.rera_id].join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
@@ -499,7 +564,7 @@ function App() {
       return (x < y ? -1 : x > y ? 1 : 0) * mul;
     });
     return rows;
-  }, [all, f, sort, colSel]);
+  }, [all, f, sort, colSel, deletedIds]);
 
   const stats = useMemo(() => {
     const priced = filtered.filter(r => r.price_cr != null);
@@ -551,13 +616,17 @@ function App() {
             {filtered.length} result{filtered.length === 1 ? "" : "s"}
             {Object.keys(colSel).length > 0 &&
               <button onClick={() => setColSel({})} className="ml-3 text-xs text-indigo-600 hover:underline">clear column filters</button>}
+            {deletedIds.size > 0 &&
+              <button onClick={restoreAll} className="ml-3 text-xs text-rose-600 hover:underline">restore {deletedIds.size} hidden</button>}
           </div>
           <button onClick={exportCsv} className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">⬇ Export CSV</button>
         </div>
 
-        <Table rows={filtered} sort={sort} setSort={setSort} colSel={colSel} setColSel={setColSel} colValues={colValues} />
+        <Table rows={filtered} sort={sort} setSort={setSort} colSel={colSel} setColSel={setColSel} colValues={colValues} onDelete={setPendingDelete} />
         {db && <SqlPanel db={db} />}
       </div>
+
+      <ConfirmModal row={pendingDelete} onCancel={() => setPendingDelete(null)} onConfirm={confirmDelete} />
 
       <footer className="mt-8 text-center text-xs text-slate-400">
         Static viewer · SQLite-in-browser via sql.js · refresh data with <code className="bg-slate-100 px-1 rounded">python -m src.export_web</code>
