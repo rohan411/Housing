@@ -338,7 +338,7 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete, fa
                   </td>
                   <td className="px-3 py-2"><Badge kind={r.type} /></td>
                   <td className="px-3 py-2">{r.listing && <Badge kind={r.listing} />}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
+                  <td className="px-3 py-2 align-top max-w-[10rem] break-words">
                     {tgt ? <span className="text-amber-600 font-semibold">★ {r.locality}</span> : (r.locality || "?")}
                   </td>
                   <td className={cls("px-3 py-2 text-right tabular-nums", r.size_sqft >= 2000 ? "text-emerald-700 font-semibold" : "text-slate-500")}>
