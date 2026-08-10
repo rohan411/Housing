@@ -103,7 +103,7 @@ function Badge({ kind }) {
 /* ---------- filter bar ---------- */
 const EMPTY = {
   q: "", locality: "", type: "", listing: "", builder: "", source: "",
-  minCr: "", maxCr: "", minSize: "", possession: "", onlyPriced: false, onlyTarget: false,
+  minCr: "", maxCr: "", minSize: "", possession: "", onlyPriced: false, onlyTarget: false, onlyFav: false,
 };
 
 function PriceRange({ f, set, max }) {
@@ -160,6 +160,9 @@ function Filters({ f, set, options, onReset, onCriteria }) {
         </label>
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input type="checkbox" className="rounded" checked={f.onlyTarget} onChange={upd("onlyTarget")} /> Only Whitefield / Marathahalli
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" className="rounded accent-amber-500" checked={f.onlyFav} onChange={upd("onlyFav")} /> <span className="text-amber-500">★</span> Only favourites
         </label>
         <div className="flex-1" />
         <button onClick={onCriteria} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-sm">
@@ -269,7 +272,7 @@ function ColMenu({ c, open, setOpen, sel, setSel, values }) {
   );
 }
 
-function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete }) {
+function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete, favIds, onToggleFav }) {
   const [openCol, setOpenCol] = useState(null);
   const arrow = (k) => (sort.k === k ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
   const click = (k) => setSort(s => ({ k, dir: s.k === k && s.dir === "asc" ? "desc" : "asc" }));
@@ -330,7 +333,13 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete }) 
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.possession || "—"}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-[11px] text-slate-400">{r.rera_id || "—"}</td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <button onClick={() => onToggleFav(r.id)} title={favIds.has(r.id) ? "Remove from favourites" : "Add to favourites"}
+                            className={cls("inline-flex items-center justify-center h-7 w-7 rounded-lg ring-1 ring-transparent transition mr-1",
+                                           favIds.has(r.id) ? "text-amber-500 hover:bg-amber-50 hover:ring-amber-200"
+                                                            : "text-slate-300 hover:text-amber-500 hover:bg-amber-50 hover:ring-amber-200")}>
+                      {favIds.has(r.id) ? "★" : "☆"}
+                    </button>
                     <button onClick={() => onDelete(r)} title="Delete listing"
                             className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 ring-1 ring-transparent hover:ring-rose-200 transition">
                       🗑️
@@ -437,6 +446,19 @@ function App() {
     catch { return new Set(); }
   });
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [favIds, setFavIds] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("favIds") || "[]")); }
+    catch { return new Set(); }
+  });
+
+  const toggleFav = useCallback((id) => {
+    setFavIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      localStorage.setItem("favIds", JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
 
   const confirmDelete = useCallback(() => {
     setDeletedIds(prev => {
@@ -499,6 +521,7 @@ function App() {
     const q = f.q.trim().toLowerCase();
     let rows = all.filter(r => {
       if (deletedIds.has(r.id)) return false;
+      if (f.onlyFav && !favIds.has(r.id)) return false;
       if (q) {
         const hay = [r.builder, r.locality, r.description, r.source, r.rera_id].join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
@@ -564,14 +587,15 @@ function App() {
       return (x < y ? -1 : x > y ? 1 : 0) * mul;
     });
     return rows;
-  }, [all, f, sort, colSel, deletedIds]);
+  }, [all, f, sort, colSel, deletedIds, favIds]);
 
   const stats = useMemo(() => {
     const priced = filtered.filter(r => r.price_cr != null);
     const avg = priced.length ? (priced.reduce((s, r) => s + r.price_cr, 0) / priced.length) : null;
     const targets = filtered.filter(r => TARGET.has((r.locality || "").toLowerCase())).length;
-    return { total: filtered.length, targets, avg, villas: filtered.filter(r => r.type === "villa").length };
-  }, [filtered]);
+    const favs = all.filter(r => favIds.has(r.id) && !deletedIds.has(r.id)).length;
+    return { total: filtered.length, targets, avg, villas: filtered.filter(r => r.type === "villa").length, favs };
+  }, [filtered, all, favIds, deletedIds]);
 
   const applyCriteria = () => setF({ ...EMPTY, minCr: String(CRITERIA.minCr), maxCr: String(CRITERIA.maxCr) });
 
@@ -598,13 +622,15 @@ function App() {
         </div>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
         <Stat label="Matching" value={stats.total} sub="click to reset filters" accent="text-indigo-600"
               onClick={() => { setF(EMPTY); setColSel({}); }} />
         <Stat label="In target areas" value={stats.targets} sub="Whitefield / Marathahalli" accent="text-amber-600"
               onClick={() => setF(p => ({ ...p, onlyTarget: !p.onlyTarget }))} active={f.onlyTarget} />
         <Stat label="Villas" value={stats.villas} sub="click to show villas" accent="text-violet-600"
               onClick={() => setF(p => ({ ...p, type: p.type === "villa" ? "" : "villa" }))} active={f.type === "villa"} />
+        <Stat label="★ Favourites" value={stats.favs} sub="click to show favourites" accent="text-amber-500"
+              onClick={() => setF(p => ({ ...p, onlyFav: !p.onlyFav }))} active={f.onlyFav} />
         <Stat label="Avg price" value={fmtCr(stats.avg)} sub="priced only" accent="text-emerald-600" />
       </div>
 
@@ -622,7 +648,7 @@ function App() {
           <button onClick={exportCsv} className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">⬇ Export CSV</button>
         </div>
 
-        <Table rows={filtered} sort={sort} setSort={setSort} colSel={colSel} setColSel={setColSel} colValues={colValues} onDelete={setPendingDelete} />
+        <Table rows={filtered} sort={sort} setSort={setSort} colSel={colSel} setColSel={setColSel} colValues={colValues} onDelete={setPendingDelete} favIds={favIds} onToggleFav={toggleFav} />
         {db && <SqlPanel db={db} />}
       </div>
 
