@@ -482,6 +482,57 @@ function App() {
     localStorage.removeItem("deletedIds");
   }, []);
 
+  // Merge a committed overrides.json (global favourites/deletions baked into the
+  // published site) with the browser's localStorage. This is how favourites and
+  // deletions become persistent across browsers/devices: hand me an exported
+  // file and I commit it into web/overrides.json.
+  useEffect(() => {
+    fetch("overrides.json", { cache: "no-store" })
+      .then(r => (r.ok ? r.json() : null))
+      .then(o => {
+        if (!o) return;
+        if (Array.isArray(o.deleted) && o.deleted.length) {
+          setDeletedIds(prev => {
+            const n = new Set(prev); o.deleted.forEach(id => n.add(id));
+            localStorage.setItem("deletedIds", JSON.stringify([...n])); return n;
+          });
+        }
+        if (Array.isArray(o.favourites) && o.favourites.length) {
+          setFavIds(prev => {
+            const n = new Set(prev); o.favourites.forEach(id => n.add(id));
+            localStorage.setItem("favIds", JSON.stringify([...n])); return n;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const exportChanges = useCallback(() => {
+    const payload = JSON.stringify({ favourites: [...favIds], deleted: [...deletedIds] }, null, 2);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    a.download = "overrides.json"; a.click();
+  }, [favIds, deletedIds]);
+
+  const importChanges = useCallback((file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const o = JSON.parse(reader.result);
+        if (Array.isArray(o.deleted)) setDeletedIds(prev => {
+          const n = new Set(prev); o.deleted.forEach(id => n.add(id));
+          localStorage.setItem("deletedIds", JSON.stringify([...n])); return n;
+        });
+        if (Array.isArray(o.favourites)) setFavIds(prev => {
+          const n = new Set(prev); o.favourites.forEach(id => n.add(id));
+          localStorage.setItem("favIds", JSON.stringify([...n])); return n;
+        });
+      } catch (e) { alert("Could not read that file: " + e.message); }
+    };
+    reader.readAsText(file);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -654,7 +705,16 @@ function App() {
             {deletedIds.size > 0 &&
               <button onClick={restoreAll} className="ml-3 text-xs text-rose-600 hover:underline">restore {deletedIds.size} hidden</button>}
           </div>
-          <button onClick={exportCsv} className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">⬇ Export CSV</button>
+          <div className="flex items-center gap-2">
+            <button onClick={exportChanges} title="Download your favourites + deletions as overrides.json (to sync across browsers or send to me to bake in)"
+                    className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">⬇ Export changes</button>
+            <label className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50 shadow-sm cursor-pointer">
+              ⬆ Import changes
+              <input type="file" accept="application/json,.json" className="hidden"
+                     onChange={e => { importChanges(e.target.files[0]); e.target.value = ""; }} />
+            </label>
+            <button onClick={exportCsv} className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">⬇ Export CSV</button>
+          </div>
         </div>
 
         <Table rows={filtered} sort={sort} setSort={setSort} colSel={colSel} setColSel={setColSel} colValues={colValues} onDelete={setPendingDelete} favIds={favIds} onToggleFav={toggleFav} />
