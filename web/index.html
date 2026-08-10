@@ -182,6 +182,7 @@ const COLS = [
   { k: "builder", label: "Builder" },
   { k: "price_cr", label: "Price", num: true },
   { k: "description", label: "Details" },
+  { k: "fav", label: "★", noMenu: true, noSort: true },
   { k: "bhk", label: "BHK" },
   { k: "type", label: "Type" },
   { k: "listing", label: "Listing" },
@@ -292,12 +293,16 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete, fa
               {COLS.map(c => (
                 <th key={c.k}
                     className={cls("px-3 py-2.5 font-semibold text-slate-600 select-none whitespace-nowrap relative",
-                                   c.num ? "text-right" : "text-left")}>
-                  <span className="inline-flex items-center">
-                    <span onClick={() => click(c.k)} className="cursor-pointer hover:text-slate-900">{c.label}{arrow(c.k)}</span>
-                    <ColMenu c={c} open={openCol === c.k} setOpen={setOpenCol}
-                             sel={colSel[c.k]} setSel={setSel} values={colValues[c.k] || []} />
-                  </span>
+                                   c.num ? "text-right" : (c.k === "fav" ? "text-center" : "text-left"))}>
+                  {c.noMenu ? (
+                    <span className={c.k === "fav" ? "text-amber-500" : ""} title="Favourite">{c.label}</span>
+                  ) : (
+                    <span className="inline-flex items-center">
+                      <span onClick={() => click(c.k)} className="cursor-pointer hover:text-slate-900">{c.label}{arrow(c.k)}</span>
+                      <ColMenu c={c} open={openCol === c.k} setOpen={setOpenCol}
+                               sel={colSel[c.k]} setSel={setSel} values={colValues[c.k] || []} />
+                    </span>
+                  )}
                 </th>
               ))}
               <th className="px-3 py-2.5 text-right font-semibold text-slate-600 whitespace-nowrap"></th>
@@ -318,6 +323,14 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete, fa
                   <td className="px-3 py-2 max-w-sm truncate" title={r.description || ""}>
                     {r.url ? <a href={r.url} target="_blank" rel="noopener" className="text-indigo-600 hover:underline">{r.description || "link"}</a> : (r.description || "—")}
                   </td>
+                  <td className="px-3 py-2 text-center">
+                    <button onClick={() => onToggleFav(r.id)} title={favIds.has(r.id) ? "Remove from favourites" : "Add to favourites"}
+                            className={cls("inline-flex items-center justify-center h-7 w-7 rounded-lg ring-1 ring-transparent transition text-lg",
+                                           favIds.has(r.id) ? "text-amber-500 hover:bg-amber-50 hover:ring-amber-200"
+                                                            : "text-slate-300 hover:text-amber-500 hover:bg-amber-50 hover:ring-amber-200")}>
+                      {favIds.has(r.id) ? "★" : "☆"}
+                    </button>
+                  </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {r.bhk
                       ? <span className="inline-block rounded-md bg-fuchsia-100 text-fuchsia-700 font-bold px-2 py-0.5 text-xs ring-1 ring-fuchsia-300">{r.bhk}</span>
@@ -334,12 +347,6 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete, fa
                   <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.possession || "—"}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-[11px] text-slate-400">{r.rera_id || "—"}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
-                    <button onClick={() => onToggleFav(r.id)} title={favIds.has(r.id) ? "Remove from favourites" : "Add to favourites"}
-                            className={cls("inline-flex items-center justify-center h-7 w-7 rounded-lg ring-1 ring-transparent transition mr-1",
-                                           favIds.has(r.id) ? "text-amber-500 hover:bg-amber-50 hover:ring-amber-200"
-                                                            : "text-slate-300 hover:text-amber-500 hover:bg-amber-50 hover:ring-amber-200")}>
-                      {favIds.has(r.id) ? "★" : "☆"}
-                    </button>
                     <button onClick={() => onDelete(r)} title="Delete listing"
                             className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 ring-1 ring-transparent hover:ring-rose-200 transition">
                       🗑️
@@ -602,11 +609,13 @@ function App() {
   const exportCsv = useCallback(() => {
     const cols = COLS.map(c => c.k);
     const esc = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-    const lines = [cols.join(","), ...filtered.map(r => cols.map(c => esc(r[c])).join(","))];
+    const cell = (r, c) => c === "fav" ? (favIds.has(r.id) ? "yes" : "") : r[c];
+    const lines = [cols.map(c => c === "fav" ? "favourite" : c).join(","),
+                   ...filtered.map(r => cols.map(c => esc(cell(r, c))).join(","))];
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
     a.download = "properties.csv"; a.click();
-  }, [filtered]);
+  }, [filtered, favIds]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
