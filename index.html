@@ -552,6 +552,15 @@ function App() {
         const cols = q[0].columns, rows = q[0].values.map(v => Object.fromEntries(cols.map((c, i) => [c, v[i]])));
         const updated = (database.exec("SELECT MAX(last_seen) FROM v_listings")[0]?.values[0][0]) || "—";
         setDb(database); setAll(rows); setMeta({ n: rows.length, updated }); setStatus("ready");
+        // Seed favourites baked into the DB (global, cross-browser) — merge with
+        // whatever is already in localStorage.
+        const dbFavs = rows.filter(r => r.favourite).map(r => r.id);
+        if (dbFavs.length) {
+          setFavIds(prev => {
+            const n = new Set(prev); dbFavs.forEach(id => n.add(id));
+            localStorage.setItem("favIds", JSON.stringify([...n])); return n;
+          });
+        }
       } catch (e) { setStatus("error:" + e.message); }
     })();
   }, []);
