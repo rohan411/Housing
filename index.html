@@ -32,6 +32,12 @@
   ::-webkit-scrollbar { height: 10px; width: 10px; }
   ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
   ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  /* Dual-handle price range slider */
+  input.range-thumb { -webkit-appearance: none; appearance: none; height: 24px; background: transparent; pointer-events: none; }
+  input.range-thumb::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; height: 18px; width: 18px; border-radius: 9999px; background: #fff; border: 2px solid #6366f1; box-shadow: 0 1px 3px rgba(0,0,0,.25); cursor: pointer; pointer-events: auto; margin-top: -1px; }
+  input.range-thumb::-moz-range-thumb { height: 18px; width: 18px; border-radius: 9999px; background: #fff; border: 2px solid #6366f1; box-shadow: 0 1px 3px rgba(0,0,0,.25); cursor: pointer; pointer-events: auto; }
+  input.range-thumb::-webkit-slider-runnable-track { background: transparent; }
+  input.range-thumb::-moz-range-track { background: transparent; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-800">
@@ -100,6 +106,35 @@ const EMPTY = {
   minCr: "", maxCr: "", minSize: "", possession: "", onlyPriced: false, onlyTarget: false,
 };
 
+function PriceRange({ f, set, max }) {
+  const lo = f.minCr === "" ? 0 : Math.max(0, parseFloat(f.minCr));
+  const hi = f.maxCr === "" ? max : Math.min(max, parseFloat(f.maxCr));
+  const pct = v => (max ? (v / max) * 100 : 0);
+  const setLo = v => { v = Math.min(v, hi); set({ ...f, minCr: v <= 0 ? "" : String(v) }); };
+  const setHi = v => { v = Math.max(v, lo); set({ ...f, maxCr: v >= max ? "" : String(v) }); };
+  return (
+    <Field label="Price (₹ Cr)">
+      <div className="w-60">
+        <div className="flex justify-between text-xs mb-1">
+          <span className="font-semibold text-slate-700 tabular-nums">₹{lo.toFixed(1)}</span>
+          <span className="font-semibold text-slate-700 tabular-nums">₹{hi.toFixed(1)}{hi >= max ? "+" : ""}</span>
+        </div>
+        <div className="relative h-6">
+          <div className="absolute top-1/2 -translate-y-1/2 h-1.5 w-full rounded-full bg-slate-200" />
+          <div className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-indigo-500"
+               style={{ left: pct(lo) + "%", right: (100 - pct(hi)) + "%" }} />
+          <input type="range" min="0" max={max} step="0.1" value={lo}
+                 onChange={e => setLo(parseFloat(e.target.value))}
+                 className="range-thumb absolute inset-0 w-full" />
+          <input type="range" min="0" max={max} step="0.1" value={hi}
+                 onChange={e => setHi(parseFloat(e.target.value))}
+                 className="range-thumb absolute inset-0 w-full" />
+        </div>
+      </div>
+    </Field>
+  );
+}
+
 function Filters({ f, set, options, onReset, onCriteria }) {
   const upd = (k) => (e) => set({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
   const Sel = (k, list, any = "any") => (
@@ -117,7 +152,7 @@ function Filters({ f, set, options, onReset, onCriteria }) {
         <Field label="Locality">{Sel("locality", options.localities)}</Field>
         <Field label="Type">{Sel("type", options.types)}</Field>
         <Field label="Builder">{Sel("builder", options.builders)}</Field>
-        <Field label="Possession ≤"><input type="date" className={inputCls} value={f.possession} onChange={upd("possession")} /></Field>
+        <PriceRange f={f} set={set} max={options.priceMax} />
       </div>
       <div className="flex flex-wrap gap-4 items-center mt-3">
         <label className="flex items-center gap-2 text-sm text-slate-600">
@@ -380,7 +415,8 @@ function App() {
   const options = useMemo(() => {
     const uniq = k => [...new Set(all.map(r => r[k]).filter(v => v && v !== "?"))].sort();
     return { localities: uniq("locality"), builders: uniq("builder"), sources: uniq("source"),
-             types: uniq("type"), listings: uniq("listing"), bhks: uniq("bhk") };
+             types: uniq("type"), listings: uniq("listing"), bhks: uniq("bhk"),
+             priceMax: Math.max(1, Math.ceil(Math.max(0, ...all.map(r => r.price_cr || 0)))) };
   }, [all]);
 
   // Distinct value lists per (non-numeric) column for the modern column-filter menus.
@@ -472,7 +508,7 @@ function App() {
     return { total: filtered.length, targets, avg, villas: filtered.filter(r => r.type === "villa").length };
   }, [filtered]);
 
-  const applyCriteria = () => setF({ ...EMPTY, possession: CRITERIA.possession });
+  const applyCriteria = () => setF({ ...EMPTY, minCr: String(CRITERIA.minCr), maxCr: String(CRITERIA.maxCr) });
 
   const exportCsv = useCallback(() => {
     const cols = COLS.map(c => c.k);
