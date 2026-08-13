@@ -177,19 +177,63 @@ function Filters({ f, set, options, onReset, onCriteria }) {
 }
 
 /* ---------- results table ---------- */
+// Shared cell renderers so the same <Table> can render either the matched
+// listings or the dropped/discarded ones — each column knows how to draw itself.
+const cellText   = k => r => <span className="text-slate-600">{r[k] || "—"}</span>;
+const cellPrice  = r => r.price_cr != null
+  ? <span className={cls("inline-block rounded-md px-2 py-0.5 tabular-nums font-bold ring-1", priceBand(r.price_cr))}>{fmtCr(r.price_cr)}</span>
+  : <span className="text-slate-300">—</span>;
+const cellBhk    = r => r.bhk
+  ? <span className="inline-block rounded-md bg-fuchsia-100 text-fuchsia-700 font-bold px-2 py-0.5 text-xs ring-1 ring-fuchsia-300">{r.bhk}</span>
+  : <span className="text-slate-300">—</span>;
+const cellSize   = r => <span className={cls("tabular-nums", r.size_sqft >= 2000 ? "text-emerald-700 font-semibold" : "text-slate-500")}>
+                          {r.size_sqft ? (r.size_sqft >= 2000 ? "✓ " + r.size_sqft : r.size_sqft) : "—"}</span>;
+const cellLoc    = r => { const tgt = TARGET.has((r.locality || "").toLowerCase());
+  return tgt ? <span className="text-amber-600 font-semibold">★ {r.locality}</span> : (r.locality || "?"); };
+const cellLink   = (textKey) => r => r.url
+  ? <a href={r.url} target="_blank" rel="noopener" className="text-indigo-600 hover:underline">{r[textKey] || "link"}</a>
+  : (r[textKey] || "—");
+const cellFav    = (r, ctx) => (
+  <button onClick={() => ctx.onToggleFav(r.id)} title={ctx.favIds.has(r.id) ? "Remove from favourites" : "Add to favourites"}
+          className={cls("inline-flex items-center justify-center h-7 w-7 rounded-lg ring-1 ring-transparent transition text-lg",
+                         ctx.favIds.has(r.id) ? "text-amber-500 hover:bg-amber-50 hover:ring-amber-200"
+                                              : "text-slate-300 hover:text-amber-500 hover:bg-amber-50 hover:ring-amber-200")}>
+    {ctx.favIds.has(r.id) ? "★" : "☆"}</button>
+);
+const reasonColor = s => /builder/.test(s || "") ? "bg-orange-100 text-orange-700 ring-orange-300"
+                       : /sqft/.test(s || "")   ? "bg-slate-100 text-slate-600 ring-slate-300"
+                       : "bg-slate-100 text-slate-600 ring-slate-300";
+const cellReason = r => r.drop_reason
+  ? <span className={cls("inline-block rounded-md px-2 py-0.5 text-xs font-medium ring-1", reasonColor(r.drop_reason))}>{r.drop_reason}</span>
+  : "—";
+
 const COLS = [
-  { k: "source", label: "Source" },
-  { k: "builder", label: "Builder" },
-  { k: "price_cr", label: "Price", num: true },
-  { k: "description", label: "Details" },
-  { k: "fav", label: "★", noMenu: true, noSort: true },
-  { k: "bhk", label: "BHK" },
-  { k: "type", label: "Type" },
-  { k: "listing", label: "Listing" },
-  { k: "locality", label: "Locality" },
-  { k: "size_sqft", label: "Sq ft", num: true },
-  { k: "possession", label: "Possession" },
-  { k: "rera_id", label: "RERA" },
+  { k: "source", label: "Source", cell: cellText("source"), tdCls: "whitespace-nowrap" },
+  { k: "builder", label: "Builder", cell: r => <span className="font-medium">{r.builder}</span>, tdCls: "whitespace-nowrap" },
+  { k: "price_cr", label: "Price", num: true, cell: cellPrice, tdCls: "whitespace-nowrap text-right" },
+  { k: "description", label: "Details", cell: cellLink("description"), tdCls: "max-w-sm truncate", tdTitle: r => r.description || "" },
+  { k: "fav", label: "★", noMenu: true, noSort: true, cell: cellFav, tdCls: "text-center" },
+  { k: "bhk", label: "BHK", cell: cellBhk, tdCls: "whitespace-nowrap" },
+  { k: "type", label: "Type", cell: r => <Badge kind={r.type} /> },
+  { k: "listing", label: "Listing", cell: r => (r.listing ? <Badge kind={r.listing} /> : null) },
+  { k: "locality", label: "Locality", cell: cellLoc, tdCls: "align-top max-w-[10rem] break-words" },
+  { k: "size_sqft", label: "Sq ft", num: true, cell: cellSize, tdCls: "text-right" },
+  { k: "possession", label: "Possession", cell: cellText("possession"), tdCls: "whitespace-nowrap" },
+  { k: "rera_id", label: "RERA", cell: r => <span className="text-[11px] text-slate-400">{r.rera_id || "—"}</span>, tdCls: "whitespace-nowrap" },
+];
+
+// Columns for the "Dropped / discarded" review grid (schema = v_dropped).
+const DROP_COLS = [
+  { k: "source", label: "Source", cell: cellText("source"), tdCls: "whitespace-nowrap" },
+  { k: "builder", label: "Builder guess", cell: r => <span className="font-medium">{r.builder}</span>, tdCls: "whitespace-nowrap" },
+  { k: "price_cr", label: "Price", num: true, cell: cellPrice, tdCls: "whitespace-nowrap text-right" },
+  { k: "society", label: "Society / title", cell: cellLink("society"), tdCls: "max-w-sm truncate", tdTitle: r => r.society || "" },
+  { k: "drop_reason", label: "Why dropped", cell: cellReason },
+  { k: "bhk", label: "BHK", cell: cellBhk, tdCls: "whitespace-nowrap" },
+  { k: "type", label: "Type", cell: r => <Badge kind={r.type} /> },
+  { k: "listing", label: "Listing", cell: r => (r.listing ? <Badge kind={r.listing} /> : null) },
+  { k: "locality", label: "Locality", cell: cellLoc, tdCls: "align-top max-w-[10rem] break-words" },
+  { k: "size_sqft", label: "Sq ft", num: true, cell: cellSize, tdCls: "text-right" },
 ];
 
 function ColMenu({ c, open, setOpen, sel, setSel, values }) {
@@ -273,8 +317,9 @@ function ColMenu({ c, open, setOpen, sel, setSel, values }) {
   );
 }
 
-function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete, favIds, onToggleFav }) {
+function Table({ rows, cols = COLS, sort, setSort, colSel, setColSel, colValues, onDelete, favIds, onToggleFav }) {
   const [openCol, setOpenCol] = useState(null);
+  const ctx = { favIds, onToggleFav };
   const arrow = (k) => (sort.k === k ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
   const click = (k) => setSort(s => ({ k, dir: s.k === k && s.dir === "asc" ? "desc" : "asc" }));
   const setSel = (k, val) => setColSel(prev => {
@@ -290,7 +335,7 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete, fa
         <table className="min-w-full text-sm">
           <thead className="sticky top-0 bg-slate-100/95 backdrop-blur z-10">
             <tr>
-              {COLS.map(c => (
+              {cols.map(c => (
                 <th key={c.k}
                     className={cls("px-3 py-2.5 font-semibold text-slate-600 select-none whitespace-nowrap relative",
                                    c.num ? "text-right" : (c.k === "fav" ? "text-center" : "text-left"))}>
@@ -309,43 +354,15 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete, fa
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => {
+            {rows.map((r) => {
               const tgt = TARGET.has((r.locality || "").toLowerCase());
               return (
                 <tr key={r.id} className={cls("border-t border-slate-100 hover:bg-indigo-50/40", tgt && "bg-amber-50/40")}>
-                  <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.source}</td>
-                  <td className="px-3 py-2 whitespace-nowrap font-medium">{r.builder}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-right">
-                    {r.price_cr != null
-                      ? <span className={cls("inline-block rounded-md px-2 py-0.5 tabular-nums font-bold ring-1", priceBand(r.price_cr))}>{fmtCr(r.price_cr)}</span>
-                      : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-3 py-2 max-w-sm truncate" title={r.description || ""}>
-                    {r.url ? <a href={r.url} target="_blank" rel="noopener" className="text-indigo-600 hover:underline">{r.description || "link"}</a> : (r.description || "—")}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <button onClick={() => onToggleFav(r.id)} title={favIds.has(r.id) ? "Remove from favourites" : "Add to favourites"}
-                            className={cls("inline-flex items-center justify-center h-7 w-7 rounded-lg ring-1 ring-transparent transition text-lg",
-                                           favIds.has(r.id) ? "text-amber-500 hover:bg-amber-50 hover:ring-amber-200"
-                                                            : "text-slate-300 hover:text-amber-500 hover:bg-amber-50 hover:ring-amber-200")}>
-                      {favIds.has(r.id) ? "★" : "☆"}
-                    </button>
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {r.bhk
-                      ? <span className="inline-block rounded-md bg-fuchsia-100 text-fuchsia-700 font-bold px-2 py-0.5 text-xs ring-1 ring-fuchsia-300">{r.bhk}</span>
-                      : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-3 py-2"><Badge kind={r.type} /></td>
-                  <td className="px-3 py-2">{r.listing && <Badge kind={r.listing} />}</td>
-                  <td className="px-3 py-2 align-top max-w-[10rem] break-words">
-                    {tgt ? <span className="text-amber-600 font-semibold">★ {r.locality}</span> : (r.locality || "?")}
-                  </td>
-                  <td className={cls("px-3 py-2 text-right tabular-nums", r.size_sqft >= 2000 ? "text-emerald-700 font-semibold" : "text-slate-500")}>
-                    {r.size_sqft ? (r.size_sqft >= 2000 ? "✓ " + r.size_sqft : r.size_sqft) : "—"}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.possession || "—"}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-[11px] text-slate-400">{r.rera_id || "—"}</td>
+                  {cols.map(c => (
+                    <td key={c.k} className={cls("px-3 py-2", c.tdCls)} title={c.tdTitle ? c.tdTitle(r) : undefined}>
+                      {c.cell ? c.cell(r, ctx) : (r[c.k] == null ? "—" : String(r[c.k]))}
+                    </td>
+                  ))}
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <button onClick={() => onDelete(r)} title="Delete listing"
                             className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 ring-1 ring-transparent hover:ring-rose-200 transition">
@@ -356,7 +373,7 @@ function Table({ rows, sort, setSort, colSel, setColSel, colValues, onDelete, fa
               );
             })}
             {rows.length === 0 && (
-              <tr><td colSpan={COLS.length + 1} className="px-3 py-10 text-center text-slate-400">No listings match these filters.</td></tr>
+              <tr><td colSpan={cols.length + 1} className="px-3 py-10 text-center text-slate-400">No listings match these filters.</td></tr>
             )}
           </tbody>
         </table>
@@ -443,6 +460,8 @@ function ConfirmModal({ row, onCancel, onConfirm }) {
 function App() {
   const [db, setDb] = useState(null);
   const [all, setAll] = useState([]);
+  const [allDrop, setAllDrop] = useState([]);
+  const [view, setView] = useState("matches"); // "matches" | "dropped"
   const [meta, setMeta] = useState({ n: 0, updated: "" });
   const [status, setStatus] = useState("loading");
   const [f, setF] = useState(EMPTY);
@@ -452,11 +471,21 @@ function App() {
     try { return new Set(JSON.parse(localStorage.getItem("deletedIds") || "[]")); }
     catch { return new Set(); }
   });
+  const [deletedDropIds, setDeletedDropIds] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("deletedDropIds") || "[]")); }
+    catch { return new Set(); }
+  });
   const [pendingDelete, setPendingDelete] = useState(null);
   const [favIds, setFavIds] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem("favIds") || "[]")); }
     catch { return new Set(); }
   });
+
+  // Active view wiring — the same grid/filters serve matches and dropped.
+  const isDrop = view === "dropped";
+  const activeAll = isDrop ? allDrop : all;
+  const activeCols = isDrop ? DROP_COLS : COLS;
+  const activeDeleted = isDrop ? deletedDropIds : deletedIds;
 
   const toggleFav = useCallback((id) => {
     setFavIds(prev => {
@@ -468,19 +497,21 @@ function App() {
   }, []);
 
   const confirmDelete = useCallback(() => {
-    setDeletedIds(prev => {
+    const key = isDrop ? "deletedDropIds" : "deletedIds";
+    const setter = isDrop ? setDeletedDropIds : setDeletedIds;
+    setter(prev => {
       const next = new Set(prev);
       if (pendingDelete) next.add(pendingDelete.id);
-      localStorage.setItem("deletedIds", JSON.stringify([...next]));
+      localStorage.setItem(key, JSON.stringify([...next]));
       return next;
     });
     setPendingDelete(null);
-  }, [pendingDelete]);
+  }, [pendingDelete, isDrop]);
 
   const restoreAll = useCallback(() => {
-    setDeletedIds(new Set());
-    localStorage.removeItem("deletedIds");
-  }, []);
+    if (isDrop) { setDeletedDropIds(new Set()); localStorage.removeItem("deletedDropIds"); }
+    else { setDeletedIds(new Set()); localStorage.removeItem("deletedIds"); }
+  }, [isDrop]);
 
   // Merge a committed overrides.json (global favourites/deletions baked into the
   // published site) with the browser's localStorage. This is how favourites and
@@ -552,6 +583,14 @@ function App() {
         const cols = q[0].columns, rows = q[0].values.map(v => Object.fromEntries(cols.map((c, i) => [c, v[i]])));
         const updated = (database.exec("SELECT MAX(last_seen) FROM v_listings")[0]?.values[0][0]) || "—";
         setDb(database); setAll(rows); setMeta({ n: rows.length, updated }); setStatus("ready");
+        // Dropped / discarded listings (best-effort — view may be absent on old snapshots).
+        try {
+          const dq = database.exec("SELECT * FROM v_dropped");
+          if (dq.length) {
+            const dc = dq[0].columns;
+            setAllDrop(dq[0].values.map(v => Object.fromEntries(dc.map((c, i) => [c, v[i]]))));
+          }
+        } catch (e) { /* no dropped view */ }
         // Seed favourites baked into the DB (global, cross-browser) — merge with
         // whatever is already in localStorage.
         const dbFavs = rows.filter(r => r.favourite).map(r => r.id);
@@ -566,31 +605,31 @@ function App() {
   }, []);
 
   const options = useMemo(() => {
-    const uniq = k => [...new Set(all.map(r => r[k]).filter(v => v && v !== "?"))].sort();
+    const uniq = k => [...new Set(activeAll.map(r => r[k]).filter(v => v && v !== "?"))].sort();
     return { localities: uniq("locality"), builders: uniq("builder"), sources: uniq("source"),
              types: uniq("type"), listings: uniq("listing"), bhks: uniq("bhk"),
-             priceMax: Math.max(1, Math.ceil(Math.max(0, ...all.map(r => r.price_cr || 0)))) };
-  }, [all]);
+             priceMax: Math.max(1, Math.ceil(Math.max(0, ...activeAll.map(r => r.price_cr || 0)))) };
+  }, [activeAll]);
 
   // Distinct value lists per (non-numeric) column for the modern column-filter menus.
   const colValues = useMemo(() => {
     const m = {};
-    for (const c of COLS) {
+    for (const c of activeCols) {
       if (c.num) continue;
-      const s = new Set(all.map(r => (r[c.k] == null || r[c.k] === "") ? "—" : String(r[c.k])));
+      const s = new Set(activeAll.map(r => (r[c.k] == null || r[c.k] === "") ? "—" : String(r[c.k])));
       m[c.k] = [...s].sort((a, b) => a.localeCompare(b));
     }
     return m;
-  }, [all]);
+  }, [activeAll, activeCols]);
 
   const filtered = useMemo(() => {
     const minCr = parseFloat(f.minCr), maxCr = parseFloat(f.maxCr), minSize = parseFloat(f.minSize);
     const q = f.q.trim().toLowerCase();
-    let rows = all.filter(r => {
-      if (deletedIds.has(r.id)) return false;
-      if (f.onlyFav && !favIds.has(r.id)) return false;
+    let rows = activeAll.filter(r => {
+      if (activeDeleted.has(r.id)) return false;
+      if (!isDrop && f.onlyFav && !favIds.has(r.id)) return false;
       if (q) {
-        const hay = [r.builder, r.locality, r.description, r.source, r.rera_id].join(" ").toLowerCase();
+        const hay = [r.builder, r.locality, r.description, r.society, r.drop_reason, r.source, r.rera_id].join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
       if (f.locality && (r.locality || "").toLowerCase() !== f.locality.toLowerCase()) return false;
@@ -607,7 +646,7 @@ function App() {
       if (!isNaN(minSize) && r.size_sqft != null && r.size_sqft < minSize) return false;
       if (f.possession && r.possession && r.possession > f.possession) return false;
       // per-column grid filters (modern column menus)
-      for (const c of COLS) {
+      for (const c of activeCols) {
         const sel = colSel[c.k];
         if (!sel) continue;
         if (c.num) {
@@ -654,7 +693,7 @@ function App() {
       return (x < y ? -1 : x > y ? 1 : 0) * mul;
     });
     return rows;
-  }, [all, f, sort, colSel, deletedIds, favIds]);
+  }, [activeAll, activeCols, activeDeleted, isDrop, f, sort, colSel, favIds]);
 
   const stats = useMemo(() => {
     const priced = filtered.filter(r => r.price_cr != null);
@@ -667,15 +706,15 @@ function App() {
   const applyCriteria = () => setF({ ...EMPTY, minCr: String(CRITERIA.minCr), maxCr: String(CRITERIA.maxCr) });
 
   const exportCsv = useCallback(() => {
-    const cols = COLS.map(c => c.k);
+    const cols = activeCols.map(c => c.k);
     const esc = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
     const cell = (r, c) => c === "fav" ? (favIds.has(r.id) ? "yes" : "") : r[c];
     const lines = [cols.map(c => c === "fav" ? "favourite" : c).join(","),
                    ...filtered.map(r => cols.map(c => esc(cell(r, c))).join(","))];
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
-    a.download = "properties.csv"; a.click();
-  }, [filtered, favIds]);
+    a.download = isDrop ? "dropped.csv" : "properties.csv"; a.click();
+  }, [filtered, favIds, activeCols, isDrop]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
@@ -691,6 +730,25 @@ function App() {
         </div>
       </header>
 
+      <div className="flex items-center gap-1 mb-5 border-b border-slate-200">
+        {[["matches", "🏠 Matches", all.length],
+          ["dropped", "🗂️ Dropped", allDrop.length]].map(([key, label, count]) => (
+          <button key={key} onClick={() => { setView(key); setF(EMPTY); setColSel({}); setSort({ k: "relevance", dir: "asc" }); }}
+                  className={cls("px-4 py-2 text-sm font-semibold rounded-t-lg -mb-px border-b-2 transition",
+                                 view === key ? "border-indigo-600 text-indigo-700 bg-white"
+                                              : "border-transparent text-slate-500 hover:text-slate-700")}>
+            {label} <span className={cls("ml-1 text-xs rounded-full px-1.5 py-0.5",
+                                         view === key ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500")}>{count}</span>
+          </button>
+        ))}
+      </div>
+
+      {isDrop && (
+        <div className="mb-4 rounded-xl bg-orange-50 border border-orange-200 px-4 py-3 text-sm text-orange-800">
+          These are NoBroker listings from the ₹4–5.5 Cr sweep that were <b>auto-discarded</b> — either no strong tier-1 builder
+          name matched the society, or under 2000 sq. ft. Scan here to rescue any genuine resale unit the filter missed.
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
         <Stat label="Matching" value={stats.total} sub="click to reset filters" accent="text-indigo-600"
               onClick={() => { setF(EMPTY); setColSel({}); }} />
@@ -711,8 +769,8 @@ function App() {
             {filtered.length} result{filtered.length === 1 ? "" : "s"}
             {Object.keys(colSel).length > 0 &&
               <button onClick={() => setColSel({})} className="ml-3 text-xs text-indigo-600 hover:underline">clear column filters</button>}
-            {deletedIds.size > 0 &&
-              <button onClick={restoreAll} className="ml-3 text-xs text-rose-600 hover:underline">restore {deletedIds.size} hidden</button>}
+            {activeDeleted.size > 0 &&
+              <button onClick={restoreAll} className="ml-3 text-xs text-rose-600 hover:underline">restore {activeDeleted.size} hidden</button>}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={exportChanges} title="Download your favourites + deletions as overrides.json (to sync across browsers or send to me to bake in)"
@@ -726,7 +784,7 @@ function App() {
           </div>
         </div>
 
-        <Table rows={filtered} sort={sort} setSort={setSort} colSel={colSel} setColSel={setColSel} colValues={colValues} onDelete={setPendingDelete} favIds={favIds} onToggleFav={toggleFav} />
+        <Table rows={filtered} cols={activeCols} sort={sort} setSort={setSort} colSel={colSel} setColSel={setColSel} colValues={colValues} onDelete={setPendingDelete} favIds={favIds} onToggleFav={toggleFav} />
         {db && <SqlPanel db={db} />}
       </div>
 
