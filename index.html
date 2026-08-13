@@ -209,7 +209,7 @@ const cellReason = r => r.drop_reason
 
 const COLS = [
   { k: "source", label: "Source", cell: cellText("source"), tdCls: "whitespace-nowrap" },
-  { k: "builder", label: "Builder", cell: r => <span className="font-medium">{r.builder}</span>, tdCls: "whitespace-nowrap" },
+  { k: "builder", label: "Builder", cell: r => <span className="font-medium">{r.builder}{r.__rescued && <span className="ml-1 align-middle inline-block rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold px-1 py-0.5 ring-1 ring-emerald-300">⤴ rescued</span>}</span>, tdCls: "whitespace-nowrap" },
   { k: "price_cr", label: "Price", num: true, cell: cellPrice, tdCls: "whitespace-nowrap text-right" },
   { k: "description", label: "Details", cell: cellLink("description"), tdCls: "max-w-sm truncate", tdTitle: r => r.description || "" },
   { k: "fav", label: "★", noMenu: true, noSort: true, cell: cellFav, tdCls: "text-center" },
@@ -227,6 +227,7 @@ const DROP_COLS = [
   { k: "source", label: "Source", cell: cellText("source"), tdCls: "whitespace-nowrap" },
   { k: "builder", label: "Builder guess", cell: r => <span className="font-medium">{r.builder}</span>, tdCls: "whitespace-nowrap" },
   { k: "price_cr", label: "Price", num: true, cell: cellPrice, tdCls: "whitespace-nowrap text-right" },
+  { k: "fav", label: "★", noMenu: true, noSort: true, cell: cellFav, tdCls: "text-center" },
   { k: "society", label: "Society / title", cell: cellLink("society"), tdCls: "max-w-sm truncate", tdTitle: r => r.society || "" },
   { k: "drop_reason", label: "Why dropped", cell: cellReason },
   { k: "bhk", label: "BHK", cell: cellBhk, tdCls: "whitespace-nowrap" },
@@ -317,7 +318,7 @@ function ColMenu({ c, open, setOpen, sel, setSel, values }) {
   );
 }
 
-function Table({ rows, cols = COLS, sort, setSort, colSel, setColSel, colValues, onDelete, favIds, onToggleFav }) {
+function Table({ rows, cols = COLS, view = "matches", sort, setSort, colSel, setColSel, colValues, onDelete, onRescue, favIds, onToggleFav }) {
   const [openCol, setOpenCol] = useState(null);
   const ctx = { favIds, onToggleFav };
   const arrow = (k) => (sort.k === k ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
@@ -364,10 +365,24 @@ function Table({ rows, cols = COLS, sort, setSort, colSel, setColSel, colValues,
                     </td>
                   ))}
                   <td className="px-3 py-2 text-right whitespace-nowrap">
-                    <button onClick={() => onDelete(r)} title="Delete listing"
-                            className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 ring-1 ring-transparent hover:ring-rose-200 transition">
-                      🗑️
-                    </button>
+                    <div className="inline-flex items-center gap-1">
+                      {view === "dropped" && onRescue && (
+                        <button onClick={() => onRescue(r)} title="Move to Matches (rescue this listing)"
+                                className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 ring-1 ring-transparent hover:ring-emerald-200 transition">
+                          ⤴
+                        </button>
+                      )}
+                      {view === "matches" && r.__rescued && onRescue && (
+                        <button onClick={() => onRescue(r)} title="Return to Dropped"
+                                className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 ring-1 ring-transparent hover:ring-amber-200 transition">
+                          ⤵
+                        </button>
+                      )}
+                      <button onClick={() => onDelete(r)} title="Delete listing"
+                              className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 ring-1 ring-transparent hover:ring-rose-200 transition">
+                        🗑️
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -480,18 +495,64 @@ function App() {
     try { return new Set(JSON.parse(localStorage.getItem("favIds") || "[]")); }
     catch { return new Set(); }
   });
+  const [favDropIds, setFavDropIds] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("favDropIds") || "[]")); }
+    catch { return new Set(); }
+  });
+  const [rescuedIds, setRescuedIds] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("rescuedIds") || "[]")); }
+    catch { return new Set(); }
+  });
+
+  // A dropped row promoted into the Matches grid keeps its data but gets a
+  // namespaced id ("d"+id) so it never collides with a real listing id in the
+  // favourite / delete Sets.
+  const dropToMatch = (d) => ({
+    ...d, id: "d" + d.id, __rescued: true, __dropId: d.id,
+    description: d.society, possession: null, rera_id: null, favourite: 0,
+  });
+  const matchesRows = useMemo(
+    () => [...all, ...allDrop.filter(d => rescuedIds.has(d.id)).map(dropToMatch)],
+    [all, allDrop, rescuedIds]);
+  const droppedRows = useMemo(
+    () => allDrop.filter(d => !rescuedIds.has(d.id)),
+    [allDrop, rescuedIds]);
 
   // Active view wiring — the same grid/filters serve matches and dropped.
   const isDrop = view === "dropped";
-  const activeAll = isDrop ? allDrop : all;
+  const activeAll = isDrop ? droppedRows : matchesRows;
   const activeCols = isDrop ? DROP_COLS : COLS;
   const activeDeleted = isDrop ? deletedDropIds : deletedIds;
+  const activeFav = isDrop ? favDropIds : favIds;
 
   const toggleFav = useCallback((id) => {
     setFavIds(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       localStorage.setItem("favIds", JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
+
+  const toggleFavDrop = useCallback((id) => {
+    setFavDropIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      localStorage.setItem("favDropIds", JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
+
+  const activeToggleFav = isDrop ? toggleFavDrop : toggleFav;
+
+  // Rescue = promote a dropped listing into the Matches grid (or, when called
+  // on an already-rescued row, send it back to Dropped).
+  const toggleRescue = useCallback((row) => {
+    const dropId = row.__dropId != null ? row.__dropId : row.id;
+    setRescuedIds(prev => {
+      const next = new Set(prev);
+      next.has(dropId) ? next.delete(dropId) : next.add(dropId);
+      localStorage.setItem("rescuedIds", JSON.stringify([...next]));
       return next;
     });
   }, []);
@@ -522,28 +583,29 @@ function App() {
       .then(r => (r.ok ? r.json() : null))
       .then(o => {
         if (!o) return;
-        if (Array.isArray(o.deleted) && o.deleted.length) {
-          setDeletedIds(prev => {
-            const n = new Set(prev); o.deleted.forEach(id => n.add(id));
-            localStorage.setItem("deletedIds", JSON.stringify([...n])); return n;
-          });
-        }
-        if (Array.isArray(o.favourites) && o.favourites.length) {
-          setFavIds(prev => {
-            const n = new Set(prev); o.favourites.forEach(id => n.add(id));
-            localStorage.setItem("favIds", JSON.stringify([...n])); return n;
-          });
-        }
+        const merge = (arr, setter, key) => {
+          if (!Array.isArray(arr) || !arr.length) return;
+          setter(prev => { const n = new Set(prev); arr.forEach(id => n.add(id));
+            localStorage.setItem(key, JSON.stringify([...n])); return n; });
+        };
+        merge(o.deleted, setDeletedIds, "deletedIds");
+        merge(o.favourites, setFavIds, "favIds");
+        merge(o.favDrop, setFavDropIds, "favDropIds");
+        merge(o.rescued, setRescuedIds, "rescuedIds");
+        merge(o.deletedDrop, setDeletedDropIds, "deletedDropIds");
       })
       .catch(() => {});
   }, []);
 
   const exportChanges = useCallback(() => {
-    const payload = JSON.stringify({ favourites: [...favIds], deleted: [...deletedIds] }, null, 2);
+    const payload = JSON.stringify({
+      favourites: [...favIds], deleted: [...deletedIds],
+      favDrop: [...favDropIds], rescued: [...rescuedIds], deletedDrop: [...deletedDropIds],
+    }, null, 2);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
     a.download = "overrides.json"; a.click();
-  }, [favIds, deletedIds]);
+  }, [favIds, deletedIds, favDropIds, rescuedIds, deletedDropIds]);
 
   const importChanges = useCallback((file) => {
     if (!file) return;
@@ -551,14 +613,16 @@ function App() {
     reader.onload = () => {
       try {
         const o = JSON.parse(reader.result);
-        if (Array.isArray(o.deleted)) setDeletedIds(prev => {
-          const n = new Set(prev); o.deleted.forEach(id => n.add(id));
-          localStorage.setItem("deletedIds", JSON.stringify([...n])); return n;
-        });
-        if (Array.isArray(o.favourites)) setFavIds(prev => {
-          const n = new Set(prev); o.favourites.forEach(id => n.add(id));
-          localStorage.setItem("favIds", JSON.stringify([...n])); return n;
-        });
+        const merge = (arr, setter, key) => {
+          if (!Array.isArray(arr)) return;
+          setter(prev => { const n = new Set(prev); arr.forEach(id => n.add(id));
+            localStorage.setItem(key, JSON.stringify([...n])); return n; });
+        };
+        merge(o.deleted, setDeletedIds, "deletedIds");
+        merge(o.favourites, setFavIds, "favIds");
+        merge(o.favDrop, setFavDropIds, "favDropIds");
+        merge(o.rescued, setRescuedIds, "rescuedIds");
+        merge(o.deletedDrop, setDeletedDropIds, "deletedDropIds");
       } catch (e) { alert("Could not read that file: " + e.message); }
     };
     reader.readAsText(file);
@@ -627,7 +691,7 @@ function App() {
     const q = f.q.trim().toLowerCase();
     let rows = activeAll.filter(r => {
       if (activeDeleted.has(r.id)) return false;
-      if (!isDrop && f.onlyFav && !favIds.has(r.id)) return false;
+      if (f.onlyFav && !activeFav.has(r.id)) return false;
       if (q) {
         const hay = [r.builder, r.locality, r.description, r.society, r.drop_reason, r.source, r.rera_id].join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
@@ -693,15 +757,15 @@ function App() {
       return (x < y ? -1 : x > y ? 1 : 0) * mul;
     });
     return rows;
-  }, [activeAll, activeCols, activeDeleted, isDrop, f, sort, colSel, favIds]);
+  }, [activeAll, activeCols, activeDeleted, activeFav, isDrop, f, sort, colSel]);
 
   const stats = useMemo(() => {
     const priced = filtered.filter(r => r.price_cr != null);
     const avg = priced.length ? (priced.reduce((s, r) => s + r.price_cr, 0) / priced.length) : null;
     const targets = filtered.filter(r => TARGET.has((r.locality || "").toLowerCase())).length;
-    const favs = all.filter(r => favIds.has(r.id) && !deletedIds.has(r.id)).length;
+    const favs = activeAll.filter(r => activeFav.has(r.id) && !activeDeleted.has(r.id)).length;
     return { total: filtered.length, targets, avg, villas: filtered.filter(r => r.type === "villa").length, favs };
-  }, [filtered, all, favIds, deletedIds]);
+  }, [filtered, activeAll, activeFav, activeDeleted]);
 
   const applyCriteria = () => setF({ ...EMPTY, minCr: String(CRITERIA.minCr), maxCr: String(CRITERIA.maxCr) });
 
@@ -731,8 +795,8 @@ function App() {
       </header>
 
       <div className="flex items-center gap-1 mb-5 border-b border-slate-200">
-        {[["matches", "🏠 Matches", all.length],
-          ["dropped", "🗂️ Dropped", allDrop.length]].map(([key, label, count]) => (
+        {[["matches", "🏠 Matches", matchesRows.length],
+          ["dropped", "🗂️ Dropped", droppedRows.length]].map(([key, label, count]) => (
           <button key={key} onClick={() => { setView(key); setF(EMPTY); setColSel({}); setSort({ k: "relevance", dir: "asc" }); }}
                   className={cls("px-4 py-2 text-sm font-semibold rounded-t-lg -mb-px border-b-2 transition",
                                  view === key ? "border-indigo-600 text-indigo-700 bg-white"
@@ -771,6 +835,10 @@ function App() {
               <button onClick={() => setColSel({})} className="ml-3 text-xs text-indigo-600 hover:underline">clear column filters</button>}
             {activeDeleted.size > 0 &&
               <button onClick={restoreAll} className="ml-3 text-xs text-rose-600 hover:underline">restore {activeDeleted.size} hidden</button>}
+            {!isDrop && rescuedIds.size > 0 &&
+              <span className="ml-3 text-xs text-emerald-600">⤴ {rescuedIds.size} rescued from Dropped
+                <button onClick={() => { setRescuedIds(new Set()); localStorage.removeItem("rescuedIds"); }}
+                        className="ml-1 underline hover:text-emerald-700">undo all</button></span>}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={exportChanges} title="Download your favourites + deletions as overrides.json (to sync across browsers or send to me to bake in)"
@@ -784,7 +852,7 @@ function App() {
           </div>
         </div>
 
-        <Table rows={filtered} cols={activeCols} sort={sort} setSort={setSort} colSel={colSel} setColSel={setColSel} colValues={colValues} onDelete={setPendingDelete} favIds={favIds} onToggleFav={toggleFav} />
+        <Table rows={filtered} cols={activeCols} view={view} sort={sort} setSort={setSort} colSel={colSel} setColSel={setColSel} colValues={colValues} onDelete={setPendingDelete} onRescue={toggleRescue} favIds={activeFav} onToggleFav={activeToggleFav} />
         {db && <SqlPanel db={db} />}
       </div>
 
