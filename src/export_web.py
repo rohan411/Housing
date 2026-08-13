@@ -21,6 +21,14 @@ WEB_DB = ROOT / "web" / "properties.db"
 WEB_DB_JS = ROOT / "web" / "properties.db.js"
 
 VIEW_SQL = """
+CREATE TABLE IF NOT EXISTS dropped_listings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT, source_listing_id TEXT UNIQUE, url TEXT,
+  property_type TEXT, listing_type TEXT, bhk TEXT,
+  size_sqft INTEGER, price_inr INTEGER, locality TEXT,
+  society TEXT, builder_guess TEXT, drop_reason TEXT,
+  first_seen_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 DROP VIEW IF EXISTS v_listings;
 CREATE VIEW v_listings AS
 SELECT
@@ -45,6 +53,25 @@ FROM listings l
 LEFT JOIN sources  s ON s.id = l.source_id
 LEFT JOIN builders b ON b.id = l.builder_id
 LEFT JOIN projects p ON p.id = l.project_id;
+
+DROP VIEW IF EXISTS v_dropped;
+CREATE VIEW v_dropped AS
+SELECT
+    d.id                                   AS id,
+    d.source                               AS source,
+    COALESCE(d.builder_guess, '—')         AS builder,
+    d.property_type                        AS type,
+    d.listing_type                         AS listing,
+    d.bhk                                  AS bhk,
+    COALESCE(d.locality, '?')              AS locality,
+    d.price_inr                            AS price_inr,
+    ROUND(d.price_inr / 10000000.0, 2)     AS price_cr,
+    d.size_sqft                            AS size_sqft,
+    d.society                              AS society,
+    d.drop_reason                          AS drop_reason,
+    d.url                                  AS url,
+    d.first_seen_at                        AS first_seen
+FROM dropped_listings d;
 """
 
 
